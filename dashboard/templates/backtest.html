@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BetBrain - Backtest</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        :root {
+            --primary: #00d4aa; --success: #22c55e; --danger: #ef4444;
+            --bg: #0f0f23; --surface: #1a1a2e; --text: #e2e8f0; --text2: #94a3b8;
+        }
+        body { font-family: 'Inter', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+        nav { background: var(--surface); padding: 1rem 2rem; display: flex; justify-content: space-between; border-bottom: 1px solid rgba(255,255,255,0.1); }
+        nav a { color: var(--text2); text-decoration: none; margin-left: 2rem; }
+        nav a:hover, nav a.active { color: var(--primary); }
+        nav .logo { font-size: 1.5rem; font-weight: 700; color: var(--primary); }
+        .container { max-width: 800px; margin: 2rem auto; padding: 2rem; }
+        h1 { margin-bottom: 0.5rem; }
+        .subtitle { color: var(--text2); margin-bottom: 2rem; }
+        .stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; margin-bottom: 2rem; }
+        .stat-card { background: var(--surface); padding: 1.5rem; border-radius: 12px; text-align: center; }
+        .stat-value { font-size: 2rem; font-weight: 700; }
+        .stat-value.success { color: var(--success); }
+        .stat-value.danger { color: var(--danger); }
+        .stat-label { color: var(--text2); font-size: 0.875rem; margin-top: 0.5rem; }
+        .params { background: var(--surface); padding: 1.5rem; border-radius: 12px; margin-bottom: 2rem; }
+        .params h3 { margin-bottom: 1rem; color: var(--primary); }
+        .param { display: flex; justify-content: space-between; padding: 0.5rem 0; border-bottom: 1px solid rgba(255,255,255,0.05); }
+    </style>
+</head>
+<body>
+    <nav>
+        <div class="logo">🏆 BetBrain</div>
+        <div>
+            <a href="/">Analysis</a>
+            <a href="/backtest" class="active">Backtest</a>
+            <a href="/paper">Paper Trade</a>
+        </div>
+    </nav>
+    <div class="container">
+        <h1>📈 Backtest Results</h1>
+        <p class="subtitle">{{ sport|upper }} | {{ strategy }} | {{ start }} to {{ end }}</p>
+        
+        <div class="params">
+            <h3>Parameters</h3>
+            <div class="param"><span>Sport</span><span>{{ sport|upper }}</span></div>
+            <div class="param"><span>Strategy</span><span>{{ strategy }}</span></div>
+            <div class="param"><span>Period</span><span>{{ start }} to {{ end }}</span></div>
+        </div>
+        
+        <div class="stats-grid">
+            <div class="stat-card">
+                <div class="stat-value {{ 'success' if results.total_return > 0 else 'danger' }}">
+                    {{ "%.1f"|format(results.total_return * 100) }}%
+                </div>
+                <div class="stat-label">Total Return</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value">{{ results.total_bets }}</div>
+                <div class="stat-label">Total Bets</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value {{ 'success' if results.win_rate > 0.5 else 'danger' }}">
+                    {{ "%.1f"|format(results.win_rate * 100) }}%
+                </div>
+                <div class="stat-label">Win Rate</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value">${{ "%.0f"|format(results.final_bankroll) }}</div>
+                <div class="stat-label">Final Bankroll</div>
+            </div>
+        </div>
+        
+        <p style="color: var(--text2); text-align: center;">
+            Connect real historical data and odds for actual backtest results.
+        </p>
+    </div>
+</body>
+</html>

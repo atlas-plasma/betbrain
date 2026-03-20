@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BetBrain - Sports Betting Analysis</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        :root {
+            --primary: #00d4aa;
+            --secondary: #6366f1;
+            --success: #22c55e;
+            --danger: #ef4444;
+            --warning: #f59e0b;
+            --bg: #0f0f23;
+            --surface: #1a1a2e;
+            --surface2: #16213e;
+            --text: #e2e8f0;
+            --text2: #94a3b8;
+        }
+        
+        body {
+            font-family: 'Inter', -apple-system, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+        }
+        
+        nav {
+            background: var(--surface);
+            padding: 1rem 2rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+        }
+        
+        nav a {
+            color: var(--text2);
+            text-decoration: none;
+            margin-left: 2rem;
+            transition: color 0.2s;
+        }
+        
+        nav a:hover, nav a.active {
+            color: var(--primary);
+        }
+        
+        nav .logo {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: var(--primary);
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 2rem;
+        }
+        
+        h1 {
+            font-size: 2rem;
+            margin-bottom: 0.5rem;
+        }
+        
+        .subtitle {
+            color: var(--text2);
+            margin-bottom: 2rem;
+        }
+        
+        .sport-selector {
+            display: flex;
+            gap: 1rem;
+            margin-bottom: 2rem;
+        }
+        
+        .sport-selector a {
+            padding: 0.5rem 1.5rem;
+            background: var(--surface);
+            border-radius: 8px;
+            text-decoration: none;
+            color: var(--text);
+            transition: all 0.2s;
+        }
+        
+        .sport-selector a.active {
+            background: var(--primary);
+            color: var(--bg);
+        }
+        
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+            margin-bottom: 2rem;
+        }
+        
+        .stat-card {
+            background: var(--surface);
+            padding: 1.5rem;
+            border-radius: 12px;
+            text-align: center;
+        }
+        
+        .stat-value {
+            font-size: 2rem;
+            font-weight: 700;
+            color: var(--primary);
+        }
+        
+        .stat-value.success { color: var(--success); }
+        .stat-value.danger { color: var(--danger); }
+        
+        .stat-label {
+            color: var(--text2);
+            font-size: 0.875rem;
+            margin-top: 0.5rem;
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            background: var(--surface);
+            border-radius: 12px;
+            overflow: hidden;
+        }
+        
+        th, td {
+            padding: 1rem;
+            text-align: left;
+        }
+        
+        th {
+            background: var(--surface2);
+            color: var(--text2);
+            font-weight: 600;
+            font-size: 0.875rem;
+            text-transform: uppercase;
+        }
+        
+        tr {
+            border-bottom: 1px solid rgba(255,255,255,0.05);
+        }
+        
+        tr:hover {
+            background: rgba(255,255,255,0.02);
+        }
+        
+        .positive { color: var(--success); }
+        .negative { color: var(--danger); }
+        
+        .badge {
+            display: inline-block;
+            padding: 0.25rem 0.75rem;
+            border-radius: 20px;
+            font-size: 0.75rem;
+            font-weight: 600;
+        }
+        
+        .badge-bet {
+            background: rgba(34, 197, 94, 0.2);
+            color: var(--success);
+        }
+        
+        .badge-skip {
+            background: rgba(148, 163, 184, 0.2);
+            color: var(--text2);
+        }
+        
+        .section {
+            margin-bottom: 3rem;
+        }
+        
+        .section h2 {
+            font-size: 1.25rem;
+            margin-bottom: 1rem;
+            color: var(--primary);
+        }
+        
+        footer {
+            text-align: center;
+            padding: 2rem;
+            color: var(--text2);
+            font-size: 0.875rem;
+        }
+    </style>
+</head>
+<body>
+    <nav>
+        <div class="logo">🏆 BetBrain</div>
+        <div>
+            <a href="/" class="active">Analysis</a>
+            <a href="/backtest">Backtest</a>
+            <a href="/paper">Paper Trade</a>
+        </div>
+    </nav>
+    
+    <div class="container">
+        <h1>📊 Today's Bets</h1>
+        <p class="subtitle">Generated: {{ generated }}</p>
+        
+        <div class="sport-selector">
+            <a href="/?sport=nhl" class="{{ 'active' if sport == 'nhl' else '' }}">NHL</a>
+            <a href="/?sport=nba" class="{{ 'active' if sport == 'nba' else '' }}">NBA</a>
+            <a href="/?sport=soccer" class="{{ 'active' if sport == 'soccer' else '' }}">Soccer</a>
+            <a href="/?sport=tennis" class="{{ 'active' if sport == 'tennis' else '' }}">Tennis</a>
+        </div>
+        
+        {% if bets %}
+        <div class="section">
+            <h2>✅ Value Bets ({{ bets|length }})</h2>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Match</th>
+                        <th>Market</th>
+                        <th>Odds</th>
+                        <th>Model %</th>
+                        <th>Edge</th>
+                        <th>EV</th>
+                        <th>Confidence</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for bet in bets %}
+                    <tr>
+                        <td>{{ bet.match }}</td>
+                        <td>{{ bet.market }}</td>
+                        <td>{{ bet.odds }}</td>
+                        <td>{{ "%.1f"|format(bet.model_prob * 100) }}%</td>
+                        <td class="{{ 'positive' if bet.edge > 0 else 'negative' }}">{{ "%.1f"|format(bet.edge * 100) }}%</td>
+                        <td class="{{ 'positive' if bet.ev > 0 else 'negative' }}">{{ "%.1f"|format(bet.ev * 100) }}%</td>
+                        <td>{{ bet.confidence }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% endif %}
+        
+        {% if others %}
+        <div class="section">
+            <h2>❌ Skipped ({{ others|length }})</h2>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Match</th>
+                        <th>Market</th>
+                        <th>Odds</th>
+                        <th>Edge</th>
+                        <th>Reason</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for bet in others[:10] %}
+                    <tr>
+                        <td>{{ bet.match }}</td>
+                        <td>{{ bet.market }}</td>
+                        <td>{{ bet.odds }}</td>
+                        <td class="{{ 'positive' if bet.edge > 0 else 'negative' }}">{{ "%.1f"|format(bet.edge * 100) }}%</td>
+                        <td>{{ bet.reasoning[:50] }}...</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% endif %}
+        
+        {% if not bets and not others %}
+        <p style="color: var(--text2);">No analysis available. Run with real data sources.</p>
+        {% endif %}
+    </div>
+    
+    <footer>
+        <p>BetBrain - Analysis Only. No real bets placed.</p>
+    </footer>
+</body>
+</html>

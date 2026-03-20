@@ -1,213 +1,151 @@
 """
-Sports Betting Analysis System - Main Entry Point
-
-Usage:
-    python main.py --sport nhl --date today
-    python main.py --sport nba --report
-    python main.py --sport soccer --model poisson
+BetBrain - Sports Betting Analysis System
+Main entry point for the betting bot
 """
 
 import argparse
 import sys
-from datetime import datetime, timedelta
-from typing import List, Dict
+from datetime import datetime
+from pathlib import Path
 
 # Add project root to path
-sys.path.insert(0, __file__.rsplit("/", 1)[0])
+PROJECT_ROOT = Path(__file__).parent
+sys.path.insert(0, str(PROJECT_ROOT))
 
 import config
 from data.nhl import NHLDataFetcher
-from features.engineer import create_features
-from models.predictor import get_model, LogisticModel, PoissonModel
+from data.nba import NBADataFetcher
+from data.soccer import SoccerDataFetcher
+from models.predictor import get_model
 from odds.scanner import OddsProcessor, StrategyManager
+from backtest import run_backtest
+from papertrade import PaperTrader
 
 
-class BettingAnalyzer:
-    """Main analysis engine."""
+class BetBrain:
+    """Main betting analysis system."""
     
     def __init__(self, sport: str = "nhl"):
         self.sport = sport
-        self.model = get_model("logistic")
-        self.odds_processor = OddsProcessor(
-            min_edge=config.STRATEGIES["value"]["min_edge"],
-            min_ev=config.STRATEGIES["value"]["min_ev"]
-        )
+        self.model = get_model(config.MODELS["default"])
+        self.odds_processor = OddsProcessor()
         self.strategy_manager = StrategyManager(
             bankroll=config.BANKROLL["initial"],
             kelly_fraction=config.BANKROLL["kelly_fraction"]
         )
         
         # Initialize data fetcher
-        if sport == "nhl":
-            self.data_fetcher = NHLDataFetcher()
-        else:
-            self.data_fetcher = None
+        self.data_fetcher = self._get_fetcher(sport)
     
-    def get_upcoming_games(self, days: int = 3) -> List[Dict]:
-        """Get upcoming games."""
-        
-        if self.sport == "nhl":
-            return self.data_fetcher.get_schedule(days)
-        
-        # Placeholder for other sports
-        return []
+    def _get_fetcher(self, sport: str):
+        fetchers = {
+            "nhl": NHLDataFetcher,
+            "nba": NBADataFetcher,
+            "soccer": SoccerDataFetcher,
+        }
+        return fetchers.get(sport, NHLDataFetcher)()
     
-    def analyze_games(self, games: List[Dict]) -> List:
-        """Analyze all games."""
+    def analyze(self, days: int = 3):
+        """Analyze upcoming games and find value bets."""
         
-        opportunities = []
+        # Get schedule
+        games = self.data_fetcher.get_schedule(days)
         
+        if not games:
+            print(f"No games found for {self.sport}")
+            return []
+        
+        # Get team stats
+        team_stats = {}
         for game in games:
-            home = game.get("home_team", "")
-            away = game.get("away_team", "")
+            home = game.get("home_team")
+            away = game.get("away_team")
+            if home not in team_stats:
+                team_stats[home] = self.data_fetcher.get_team_stats(home)
+            if away not in team_stats:
+                team_stats[away] = self.data_fetcher.get_team_stats(away)
+        
+        # Analyze each game
+        opportunities = []
+        for game in games:
+            home = game.get("home_team")
+            away = game.get("away_team")
             
-            # Create mock data for demonstration
-            # In production, would fetch real stats
-            team_stats = {
-                home: {
-                    "goals_for_avg": 2.8,
-                    "goals_against_avg": 2.9,
-                    "win_rate": 0.52,
-                    "home_win_rate": 0.58,
-                    "form": 0.6,
-                    "rest": 2,
-                    "games_14d": 4,
-                    "injuries": 1,
-                },
-                away: {
-                    "goals_for_avg": 2.6,
-                    "goals_against_avg": 3.0,
-                    "win_rate": 0.48,
-                    "away_win_rate": 0.42,
-                    "form": 0.4,
-                    "rest": 1,
-                    "games_14d": 5,
-                    "injuries": 2,
-                }
-            }
+            # Get predictions
+            prediction = self.model.predict(home, away, team_stats.get(home), team_stats.get(away))
             
-            # Create features
-            features = create_features(self.sport, [game], team_stats)
+            # Get odds (would need real odds API)
+            # For now, use simulated odds
+            odds = self._get_odds(home, away)
             
-            # Generate prediction
-            predictions = self.model.predict_from_features(features)
-            
-            if predictions:
-                pred = predictions[0]
-                
-                # Simulated odds (in production, fetch from API)
-                odds_home = 1.85
-                odds_away = 2.10
-                odds_over = 1.90
-                odds_under = 1.90
-                
-                # Analyze for opportunities
-                opps = self.odds_processor.analyze_match(
-                    home, away, pred,
-                    odds_home=odds_home,
-                    odds_away=odds_away,
-                    odds_over=odds_over,
-                    odds_under=odds_under
-                )
-                
-                opportunities.extend(opps)
+            # Find value
+            opps = self.odds_processor.analyze_match(
+                home, away, prediction,
+                odds_home=odds.get("home_ml"),
+                odds_away=odds.get("away_ml"),
+                odds_over=odds.get("over"),
+                odds_under=odds.get("under")
+            )
+            opportunities.extend(opps)
         
         return opportunities
     
-    def generate_report(self, opportunities: List) -> str:
-        """Generate analysis report."""
-        
-        bets = [o for o in opportunities if o.recommendation == "BET"]
-        
-        report = []
-        report.append("=" * 70)
-        report.append(f"🏆 SPORTS BETTING ANALYSIS - {self.sport.upper()}")
-        report.append(f"📅 Generated: {datetime.now().strftime('%Y-%m-%d %H:%M')}")
-        report.append("=" * 70)
-        
-        if not bets:
-            report.append("\n❌ No value bets found today.")
-            report.append("\nAll opportunities:")
-        else:
-            report.append(f"\n✅ Found {len(bets)} value bet(s)!")
-        
-        # Table header
-        report.append("\n" + "-" * 70)
-        report.append(f"{'Match':<25} {'Market':<10} {'Odds':<6} {'Model%':<8} {'Edge':<8} {'EV':<8} {'Conf':<6}")
-        report.append("-" * 70)
-        
-        for opp in opportunities:
-            edge_str = f"{opp.edge*100:+.1f}%" if opp.edge else "N/A"
-            ev_str = f"{opp.ev*100:+.1f}%" if opp.ev else "N/A"
-            model_str = f"{opp.model_prob*100:.1f}%"
-            
-            symbol = "✅" if opp.recommendation == "BET" else "❌"
-            
-            report.append(f"{symbol} {opp.match:<23} {opp.market:<10} {opp.odds:<6.2f} {model_str:<8} {edge_str:<8} {ev_str:<8} {opp.confidence:<6}")
-        
-        report.append("-" * 70)
-        
-        # Top picks
-        value_picks, safety_picks = self.strategy_manager.get_top_picks(opportunities, 3)
-        
-        if value_picks:
-            report.append("\n🎯 TOP VALUE BETS:")
-            for i, pick in enumerate(value_picks, 1):
-                report.append(f"   {i}. {pick.match} {pick.market} @ {pick.odds} ({pick.edge*100:+.1f}% edge)")
-        
-        if safety_picks:
-            report.append("\n🛡️ SAFEST PICKS (highest confidence):")
-            for i, pick in enumerate(safety_picks, 1):
-                report.append(f"   {i}. {pick.match} {pick.market} @ {pick.odds} ({pick.confidence})")
-        
-        # Reasoning for top pick
-        if value_picks:
-            top = value_picks[0]
-            report.append(f"\n💡 Top Pick Analysis:")
-            report.append(f"   {top.reasoning}")
-        
-        report.append("\n" + "=" * 70)
-        report.append("⚠️  DISCLAIMER: This is analysis only. No bets placed automatically.")
-        report.append("   Always gamble responsibly. Past performance doesn't guarantee future results.")
-        report.append("=" * 70)
-        
-        return "\n".join(report)
+    def _get_odds(self, home: str, away: str) -> dict:
+        """Get odds (simulated for now - would connect to odds API)."""
+        # This would connect to an odds API in production
+        # For demo, return simulated odds
+        import random
+        return {
+            "home_ml": round(1.7 + random.random() * 0.6, 2),
+            "away_ml": round(1.7 + random.random() * 0.6, 2),
+            "over": 1.90,
+            "under": 1.90
+        }
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Sports Betting Analysis System")
-    parser.add_argument("--sport", default="nhl", choices=["nhl", "nba", "soccer", "tennis"],
-                      help="Sport to analyze")
-    parser.add_argument("--date", default="today", help="Date (YYYY-MM-DD or 'today')")
-    parser.add_argument("--model", default="logistic", choices=["logistic", "poisson", "xgboost"],
-                      help="Prediction model")
+    parser = argparse.ArgumentParser(description="BetBrain - Sports Betting Analysis")
+    parser.add_argument("--sport", default="nhl", choices=["nhl", "nba", "soccer", "tennis"])
     parser.add_argument("--days", type=int, default=3, help="Days ahead to analyze")
-    parser.add_argument("--report", action="store_true", help="Generate full report")
+    parser.add_argument("--backtest", action="store_true", help="Run backtest")
+    parser.add_argument("--start", help="Backtest start date (YYYY-MM-DD)")
+    parser.add_argument("--end", help="Backtest end date (YYYY-MM-DD)")
+    parser.add_argument("--strategy", default="value", help="Strategy to use")
     
     args = parser.parse_args()
     
-    print(f"\n🏒 Initializing {args.sport.upper()} analysis...")
-    
-    # Create analyzer
-    analyzer = BettingAnalyzer(sport=args.sport)
-    
-    # Get games
-    print(f"📊 Fetching upcoming games...")
-    games = analyzer.get_upcoming_games(args.days)
-    
-    if not games:
-        print("❌ No games found.")
-        return
-    
-    print(f"   Found {len(games)} games")
-    
-    # Analyze
-    print("🔍 Analyzing matchups...")
-    opportunities = analyzer.analyze_games(games)
-    
-    # Generate report
-    report = analyzer.generate_report(opportunities)
-    print("\n" + report)
+    if args.backtest:
+        # Run backtest
+        results = run_backtest(
+            sport=args.sport,
+            start_date=args.start or "2024-01-01",
+            end_date=args.end or "2024-12-31",
+            strategy=args.strategy
+        )
+        print(f"\n📊 Backtest Results:")
+        print(f"   Total Return: {results['total_return']*100:.2f}%")
+        print(f"   Sharpe Ratio: {results.get('sharpe', 'N/A')}")
+        print(f"   Max Drawdown: {results.get('max_drawdown', 'N/A')}")
+        print(f"   Total Bets: {results.get('total_bets', 0)}")
+    else:
+        # Run analysis
+        bot = BetBrain(sport=args.sport)
+        opportunities = bot.analyze(days=args.days)
+        
+        # Get recommendations
+        bets = [o for o in opportunities if o.recommendation == "BET"]
+        
+        print(f"\n🏆 BetBrain - {args.sport.upper()} Analysis")
+        print(f"📅 {datetime.now().strftime('%Y-%m-%d')}")
+        print("=" * 50)
+        
+        if bets:
+            print(f"\n✅ Found {len(bets)} value bets!\n")
+            for i, bet in enumerate(bets, 1):
+                print(f"{i}. {bet.match} {bet.market}")
+                print(f"   Odds: {bet.odds} | Edge: {bet.edge*100:+.1f}% | EV: {bet.ev*100:+.1f}%")
+        else:
+            print("\n❌ No value bets found today.")
 
 
 if __name__ == "__main__":

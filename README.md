@@ -1,124 +1,74 @@
-# Sports Betting Analysis System (BetBrain)
+# BetBrain - Sports Betting Analysis System
 
-**Purpose:** Generate data-driven betting recommendations for human execution. No automated betting.
+🏆 Data-driven sports betting recommendations for human execution.
 
-**Sports:** Soccer, Basketball (NBA), Tennis, NHL
+## Features
 
----
+- 📊 **Analysis** - Analyze upcoming games and find value bets
+- 📈 **Backtesting** - Test strategies on historical data
+- 🎯 **Paper Trading** - Simulate bets without real money
+- 🏒 **Multi-sport** - NHL, NBA, Soccer, Tennis support
+
+## Quick Start
+
+```bash
+# Install dependencies
+pip install flask pandas numpy
+
+# Run dashboard
+cd dashboard
+python app.py
+
+# Open http://localhost:5556
+```
 
 ## Project Structure
 
 ```
 sports-betting/
-├── config.py           # API keys, sport configs
+├── config.py           # Configuration
+├── main.py             # CLI entry point
 ├── data/
 │   ├── nhl.py         # NHL data fetcher
-│   ├── nba.py         # NBA data fetcher  
-│   ├── soccer.py      # Soccer data fetcher
-│   └── tennis.py      # Tennis data fetcher
-├── features/
-│   └── engineer.py    # Feature engineering
+│   ├── nba.py        # NBA data fetcher
+│   └── soccer.py     # Soccer data fetcher
 ├── models/
-│   ├── poisson.py     # Poisson model (soccer)
-│   ├── logistic.py    # Logistic regression
-│   └── xgboost.py     # XGBoost model
+│   └── predictor.py   # Prediction models
 ├── odds/
-│   └── scanner.py     # Odds comparison
-├── strategies/
-│   └── manager.py    # Betting strategies
-├── output/
-│   └── report.py     # Generate recommendations
-├── main.py            # CLI entry point
-└── tests/
+│   └── scanner.py    # Odds & value detection
+├── backtest.py        # Backtesting engine
+├── papertrade.py     # Paper trading
+└── dashboard/
+    ├── app.py        # Flask dashboard
+    └── templates/    # HTML templates
 ```
 
----
+## Usage
 
-## Core Modules
-
-### 1. Data Ingestion
-
-Free APIs per sport:
-- **NHL:** `api-web.nhle.com` (free, no auth)
-- **NBA:** `balldontlie.io` (free tier)
-- **Soccer:** `api-football.com` (free tier) or `football-data.org`
-- **Tennis:** `tennis-data.io` or scrape
-
-### 2. Feature Engineering
-
-Features per sport:
-- Rolling averages (last 5-10 games)
-- Home vs away performance
-- Head-to-head
-- Momentum/streaks
-- Fatigue (games in last 7-14 days)
-- Rest days between matches
-
-### 3. Prediction Models
-
-- **Poisson:** Goals distribution (soccer)
-- **Logistic Regression:** Win probabilities
-- **XGBoost:** Feature-based predictions
-- **Elo:** Rating system baseline
-
-### 4. Odds & Value
-
-```python
-def calculate_edge(model_prob, odds):
-    implied_prob = 1 / odds
-    edge = model_prob - implied_prob
-    ev = edge * odds  # Expected value per unit bet
-    return edge, ev
-```
-
-### 5. Strategies
-
-- **Value:** Positive EV only
-- **Conservative:** >60% prob, low variance
-- **Aggressive:** >5% edge, higher variance
-- **Kelly:** Fractional Kelly bankroll
-
-### 6. Output
-
-Daily recommendation table with all columns.
-
----
-
-## Example Output Format
-
-### NHL Recommendations - March 20, 2026
-
-| Match | Market | Odds | Model % | Implied % | Edge | EV | Rec | Conf |
-|-------|--------|------|---------|-----------|------|----|-----|------|
-| MTL vs TOR | TOR ML | 1.85 | 58% | 54% | +4% | +7% | ✅ | Medium |
-| EDM vs CGY | O5.5 | 1.90 | 52% | 53% | -1% | -2% | ❌ | Low |
-
-### Summary
-- **Top Value:** TOR ML (+7% EV)
-- **Safest:** EDM vs CGY under
-- **Skip:** 2 matches (negative EV)
-
----
-
-## Run Commands
-
+### Analysis
 ```bash
-# Daily predictions for all sports
-python main.py --sport nhl --date today
-
-# Specific sport
-python main.py --sport nba --date 2026-03-20
-
-# Generate report
-python main.py --report
+python main.py --sport nhl --days 3
 ```
 
----
+### Backtest
+```bash
+python main.py --backtest --sport nhl --start 2024-01-01 --end 2024-12-31
+```
 
-## Important Notes
+### Dashboard
+```bash
+cd dashboard
+python app.py
+```
 
-1. **No bet placement** — system outputs recommendations only
-2. **Human executes** all bets
-3. **Track performance** — accuracy, ROI over time
-4. **Legal** — no ToS violation
-5. **Responsible** — always gamble responsibly
+Then open http://localhost:5556
+
+## Pages
+
+- **/** - Today's value bets
+- **/backtest** - Run strategy backtests
+- **/paper** - Paper trading simulation
+
+## Disclaimer
+
+This is analysis only. No bets are placed automatically. Always gamble responsibly.
