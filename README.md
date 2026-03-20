@@ -1,74 +1,89 @@
-# BetBrain - Sports Betting Analysis System
+# BetBrain 🏆
 
-🏆 Data-driven sports betting recommendations for human execution.
+Sports betting analysis system with real-time NHL data, multiple strategies, backtesting, and paper trading.
 
 ## Features
 
-- 📊 **Analysis** - Analyze upcoming games and find value bets
-- 📈 **Backtesting** - Test strategies on historical data
-- 🎯 **Paper Trading** - Simulate bets without real money
-- 🏒 **Multi-sport** - NHL, NBA, Soccer, Tennis support
+- **Real-time NHL Analysis** - Fetches actual games from NHL API
+- **Multiple Strategies** - Value, Conservative, Aggressive, Tier-Based, Model Plus
+- **Backtesting** - Test strategies against historical data
+- **Paper Trading** - Simulate bets without risking real money
+- **Web Dashboard** - Beautiful Flask UI
 
 ## Quick Start
 
 ```bash
+cd ~/.openclaw/workspace/sports-betting
+
 # Install dependencies
-pip install flask pandas numpy
+pip install requests flask pandas numpy
 
 # Run dashboard
-cd dashboard
-python app.py
-
-# Open http://localhost:5556
+PYTHONPATH=. python3 -m dashboard.app
 ```
+
+## Dashboard
+
+- **Local:** http://localhost:5556
+- **Public:** Use localtunnel (`lt --port 5556`)
+
+## Strategies
+
+| Strategy | Description | Threshold |
+|----------|-------------|-----------|
+| Value | Positive edge only | >3% edge |
+| Conservative | High probability | >55% win |
+| Aggressive | Higher edge | >5% edge |
+| Tier-Based | Claude's methodology | Multiple factors |
+| Model Plus | Multiple signals | Convergence |
+
+## Columns
+
+- **Time** - Match start time (SA timezone)
+- **Match** - Away @ Home
+- **Pick** - Win pick (team or OVER/UNDER)
+- **Market** - Bet type (ML, Over/Under)
+- **Odds** - Decimal odds
+- **Win %** - Model probability
+- **Edge** - Model % minus implied %
+- **Goals** - Projected total goals
 
 ## Project Structure
 
 ```
 sports-betting/
-├── config.py           # Configuration
-├── main.py             # CLI entry point
+├── main.py           # Main analysis engine
+├── config.py         # Configuration
+├── backtest.py       # Backtesting engine
 ├── data/
-│   ├── nhl.py         # NHL data fetcher
-│   ├── nba.py        # NBA data fetcher
-│   └── soccer.py     # Soccer data fetcher
+│   └── nhl.py       # NHL API fetcher
 ├── models/
-│   └── predictor.py   # Prediction models
-├── odds/
-│   └── scanner.py    # Odds & value detection
-├── backtest.py        # Backtesting engine
-├── papertrade.py     # Paper trading
+│   └── predictor.py # ML models
+├── strategy/
+│   ├── selector.py   # Strategy selector
+│   └── advanced.py   # Advanced strategies
+├── research_agent/
+│   └── agent.py      # Web research
 └── dashboard/
-    ├── app.py        # Flask dashboard
+    ├── app.py        # Flask app
     └── templates/    # HTML templates
 ```
 
-## Usage
+## Backtesting
 
-### Analysis
-```bash
-python main.py --sport nhl --days 3
-```
+Go to `/backtest` to test strategies:
+- Select strategy
+- Pick date range
+- View ROI, win rate, bankroll
 
-### Backtest
-```bash
-python main.py --backtest --sport nhl --start 2024-01-01 --end 2024-12-31
-```
+## API
 
-### Dashboard
-```bash
-cd dashboard
-python app.py
-```
+- `/` - Main analysis page
+- `/backtest` - Backtesting page
+- `/paper` - Paper trading
 
-Then open http://localhost:5556
+## Notes
 
-## Pages
-
-- **/** - Today's value bets
-- **/backtest** - Run strategy backtests
-- **/paper** - Paper trading simulation
-
-## Disclaimer
-
-This is analysis only. No bets are placed automatically. Always gamble responsibly.
+- Analysis only - no real bets placed
+- Uses free NHL API
+- Times in SA timezone (GMT+2)
