@@ -46,6 +46,7 @@ class BetBrain:
         for game in games:
             home = game.get("home_team")
             away = game.get("away_team")
+            start_time = game.get("start_time", "")
             
             if not home or not away:
                 continue
@@ -76,6 +77,7 @@ class BetBrain:
             opportunities.extend([
                 {
                     "match": f"{home} vs {away}",
+                    "start_time": start_time,
                     "market": "ML (Home)",
                     "odds": odds["home_ml"],
                     "model_prob": ml_analysis["home_prob"],
@@ -88,6 +90,7 @@ class BetBrain:
                 },
                 {
                     "match": f"{home} vs {away}",
+                    "start_time": start_time,
                     "market": "ML (Away)",
                     "odds": odds["away_ml"],
                     "model_prob": ml_analysis["away_prob"],
@@ -100,6 +103,7 @@ class BetBrain:
                 },
                 {
                     "match": f"{home} vs {away}",
+                    "start_time": start_time,
                     "market": f"Over {ou_analysis['line']}",
                     "odds": odds["over"],
                     "model_prob": ou_analysis["over_prob"],

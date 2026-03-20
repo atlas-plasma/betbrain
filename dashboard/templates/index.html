@@ -278,7 +278,7 @@
                 <tbody>
                     {% for bet in bets %}
                     <tr>
-                        <td style="color: var(--text2); font-size: 0.85rem;">Today</td>
+                        <td style="color: var(--text2); font-size: 0.85rem;">{{ bet.start_time|default('TBD') }}</td>
                         <td>{{ bet.match }}</td>
                         <td>{{ bet.market }}</td>
                         <td>{{ bet.odds }}</td>

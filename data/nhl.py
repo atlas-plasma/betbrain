@@ -70,12 +70,24 @@ class NHLDataFetcher:
                 
                 if "games" in data:
                     for game in data["games"]:
+                        # Try to get game start time
+                        start_time = ""
+                        if "startTimeUTC" in game:
+                            try:
+                                utc_time = datetime.fromisoformat(game["startTimeUTC"].replace("Z", "+00:00"))
+                                # Convert to SA time (GMT+2)
+                                sa_time = utc_time.astimezone(datetime.now().astimezone().tzinfo)
+                                start_time = sa_time.strftime("%H:%M")
+                            except:
+                                pass
+                        
                         games.append({
                             "date": datetime.now().strftime("%Y-%m-%d"),
                             "home_team": game.get("homeTeam", {}).get("abbrev"),
                             "away_team": game.get("awayTeam", {}).get("abbrev"),
                             "home_id": game.get("homeTeam", {}).get("id"),
                             "away_id": game.get("awayTeam", {}).get("id"),
+                            "start_time": start_time,
                         })
                 
                 if games:
@@ -90,14 +102,18 @@ class NHLDataFetcher:
         """Generate demo games for testing."""
         teams = list(self.get_team_abbr_map().keys())
         
+        # Typical NHL game times (SA time - games start between 00:00-02:00 SA)
+        game_times = ["00:00", "00:30", "01:00", "01:30", "02:00", "02:30"]
+        
         games = []
-        for _ in range(5):
+        for i in range(5):
             home = random.choice(teams)
             away = random.choice([t for t in teams if t != home])
             games.append({
                 "date": datetime.now().strftime("%Y-%m-%d"),
                 "home_team": home,
                 "away_team": away,
+                "start_time": random.choice(game_times),
             })
         
         return games

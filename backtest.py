@@ -92,11 +92,11 @@ class RealBacktester:
             away_stats = self.team_stats.get(away, self.team_stats["MTL"])
             
             # Calculate model probabilities
-            home_prob = home_stats["win_rate"]
-            away_prob = away_stats["win_rate"]
+            home_prob = home_stats.get("win_rate", 0.5)
+            away_prob = away_stats.get("win_rate", 0.5)
             
             # Home advantage adjustment
-            home_prob = home_stats["home_win_rate"]
+            home_prob = home_stats.get("home_win", home_stats.get("win_rate", 0.5))
             
             # Normalize
             total = home_prob + away_prob
@@ -201,8 +201,8 @@ class RealBacktester:
     def _simulate_result(self, home_stats: Dict, away_stats: Dict) -> bool:
         """Simulate game result based on team strength."""
         
-        # Home team has inherent home advantage built into home_win_rate
-        home_win_prob = home_stats["home_win_rate"]
+        # Home team has inherent home advantage
+        home_win_prob = home_stats.get("home_win", home_stats.get("win_rate", 0.5))
         
         # Use a deterministic "random" check
         # In reality, would use actual game results
