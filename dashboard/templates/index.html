@@ -72,16 +72,23 @@
         .sport-selector {
             display: flex;
             gap: 1rem;
-            margin-bottom: 2rem;
+            margin-bottom: 1rem;
+            flex-wrap: wrap;
         }
         
-        .sport-selector a {
-            padding: 0.5rem 1.5rem;
+        .sport-selector a, .sport-selector select {
+            padding: 0.5rem 1rem;
             background: var(--surface);
             border-radius: 8px;
             text-decoration: none;
             color: var(--text);
             transition: all 0.2s;
+            border: none;
+            font-size: 0.9rem;
+        }
+        
+        .sport-selector select {
+            cursor: pointer;
         }
         
         .sport-selector a.active {
@@ -201,10 +208,19 @@
         <p class="subtitle">Generated: {{ generated }}</p>
         
         <div class="sport-selector">
-            <a href="/?sport=nhl" class="{{ 'active' if sport == 'nhl' else '' }}">NHL</a>
-            <a href="/?sport=nba" class="{{ 'active' if sport == 'nba' else '' }}">NBA</a>
-            <a href="/?sport=soccer" class="{{ 'active' if sport == 'soccer' else '' }}">Soccer</a>
-            <a href="/?sport=tennis" class="{{ 'active' if sport == 'tennis' else '' }}">Tennis</a>
+            <span style="color: var(--text2); margin-right: 0.5rem;">Sport:</span>
+            <a href="/?sport=nhl&strategy={{ strategy }}" class="{{ 'active' if sport == 'nhl' else '' }}">NHL</a>
+            <a href="/?sport=nba&strategy={{ strategy }}" class="{{ 'active' if sport == 'nba' else '' }}">NBA</a>
+            <a href="/?sport=soccer&strategy={{ strategy }}" class="{{ 'active' if sport == 'soccer' else '' }}">Soccer</a>
+        </div>
+        
+        <div class="sport-selector">
+            <span style="color: var(--text2); margin-right: 0.5rem;">Strategy:</span>
+            <select onchange="window.location.href='/?sport={{ sport }}&strategy='+this.value">
+                {% for key, desc in strategies.items() %}
+                <option value="{{ key }}" {{ 'selected' if strategy == key else '' }}>{{ desc }}</option>
+                {% endfor %}
+            </select>
         </div>
         
         {% if bets %}
