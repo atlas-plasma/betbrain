@@ -40,7 +40,21 @@
     </nav>
     <div class="container">
         <h1>📈 Backtest Results</h1>
-        <p class="subtitle">{{ sport|upper }} | {{ strategy }} | {{ start }} to {{ end }}</p>
+        <p class="subtitle">{{ sport|upper }} | Strategy: <strong>{{ strategy }}</strong> | {{ start }} to {{ end }}</p>
+        
+        <div class="strategy-selector" style="margin-bottom: 2rem;">
+            <form method="get" style="display:flex;gap:1rem;align-items:center;flex-wrap:wrap;">
+                <label style="color:var(--text2);">Strategy:</label>
+                <select name="strategy" style="padding:0.5rem;background:var(--surface);color:var(--text);border:1px solid rgba(255,255,255,0.1);border-radius:6px;">
+                    {% for key, desc in strategies.items() %}
+                    <option value="{{ key }}" {{ 'selected' if strategy == key else '' }}>{{ desc }}</option>
+                    {% endfor %}
+                </select>
+                <input type="date" name="start" value="{{ start }}" style="padding:0.5rem;background:var(--surface);color:var(--text);border:1px solid rgba(255,255,255,0.1);border-radius:6px;">
+                <input type="date" name="end" value="{{ end }}" style="padding:0.5rem;background:var(--surface);color:var(--text);border:1px solid rgba(255,255,255,0.1);border-radius:6px;">
+                <button type="submit" style="padding:0.5rem 1rem;background:var(--primary);color:var(--bg);border:none;border-radius:6px;cursor:pointer;font-weight:600;">Run Backtest</button>
+            </form>
+        </div>
         
         <div class="stats-grid">
             <div class="stat-card">
