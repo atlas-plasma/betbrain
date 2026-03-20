@@ -13,7 +13,7 @@ sys.path.insert(0, str(PROJECT_ROOT))
 import config
 from data.nhl import NHLDataFetcher
 from models.predictor import get_model
-from research.agent import ResearchAgent
+from research_agent.agent import ResearchAgent
 from odds.scanner import OddsProcessor, StrategyManager
 from strategy.advanced import create_strategy
 

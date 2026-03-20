@@ -81,6 +81,11 @@ class NHLDataFetcher:
                             except:
                                 pass
                         
+                        # Only include today's games (not past)
+                        game_date = game.get("gameDate", "")
+                        if game_date and game_date != datetime.now().strftime("%Y-%m-%d"):
+                            continue
+                        
                         games.append({
                             "date": datetime.now().strftime("%Y-%m-%d"),
                             "home_team": game.get("homeTeam", {}).get("abbrev"),
@@ -102,8 +107,8 @@ class NHLDataFetcher:
         """Generate demo games for testing."""
         teams = list(self.get_team_abbr_map().keys())
         
-        # Typical NHL game times (SA time - games start between 00:00-02:00 SA)
-        game_times = ["00:00", "00:30", "01:00", "01:30", "02:00", "02:30"]
+        # Typical NHL game times in SA (UTC+2) - games start between 02:00-04:30 SA
+        game_times_sa = ["02:00", "02:30", "03:00", "03:30", "04:00", "04:30"]
         
         games = []
         for i in range(5):
@@ -113,7 +118,7 @@ class NHLDataFetcher:
                 "date": datetime.now().strftime("%Y-%m-%d"),
                 "home_team": home,
                 "away_team": away,
-                "start_time": random.choice(game_times),
+                "start_time": random.choice(game_times_sa),
             })
         
         return games

@@ -301,21 +301,29 @@
             <table>
                 <thead>
                     <tr>
+                        <th>Time</th>
                         <th>Match</th>
+                        <th>Pick</th>
                         <th>Market</th>
                         <th>Odds</th>
+                        <th>Win %</th>
                         <th>Edge</th>
+                        <th>Goals</th>
                         <th>Reason</th>
                     </tr>
                 </thead>
                 <tbody>
                     {% for bet in others[:10] %}
                     <tr>
+                        <td style="color: var(--text2); font-size: 0.85rem;">{{ bet.start_time|default('TBD') }}</td>
                         <td>{{ bet.match }}</td>
+                        <td style="color: var(--text2);">-</td>
                         <td>{{ bet.market }}</td>
                         <td>{{ bet.odds }}</td>
+                        <td>{{ "%.1f"|format(bet.model_prob * 100) }}%</td>
                         <td class="{{ 'positive' if bet.edge > 0 else 'negative' }}">{{ "%.1f"|format(bet.edge * 100) }}%</td>
-                        <td>{{ bet.reasoning[:50] }}...</td>
+                        <td>{{ bet.goal_pred|default('-') }}</td>
+                        <td style="color: var(--text2); font-size: 0.8rem;">{{ bet.reasoning[:40] }}...</td>
                     </tr>
                     {% endfor %}
                 </tbody>
