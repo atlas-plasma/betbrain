@@ -185,6 +185,42 @@
             color: var(--primary);
         }
         
+        .help-btn {
+            background: var(--surface2);
+            border: none;
+            color: var(--text2);
+            padding: 0.25rem 0.5rem;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.75rem;
+            margin-left: 0.5rem;
+        }
+        
+        .help-section {
+            background: var(--surface2);
+            padding: 1rem;
+            border-radius: 8px;
+            margin-bottom: 1rem;
+            font-size: 0.85rem;
+        }
+        
+        .help-section h3 {
+            color: var(--primary);
+            margin-bottom: 0.5rem;
+            font-size: 0.9rem;
+        }
+        
+        .help-section dt {
+            color: var(--primary);
+            font-weight: 600;
+            margin-top: 0.5rem;
+        }
+        
+        .help-section dd {
+            color: var(--text2);
+            margin-left: 1rem;
+        }
+        
         footer {
             text-align: center;
             padding: 2rem;
@@ -229,6 +265,7 @@
             <table>
                 <thead>
                     <tr>
+                        <th>Date</th>
                         <th>Match</th>
                         <th>Market</th>
                         <th>Odds</th>
@@ -241,6 +278,7 @@
                 <tbody>
                     {% for bet in bets %}
                     <tr>
+                        <td style="color: var(--text2); font-size: 0.85rem;">Today</td>
                         <td>{{ bet.match }}</td>
                         <td>{{ bet.market }}</td>
                         <td>{{ bet.odds }}</td>
@@ -286,6 +324,26 @@
         {% if not bets and not others %}
         <p style="color: var(--text2);">No analysis available. Run with real data sources.</p>
         {% endif %}
+        
+        <div class="help-section">
+            <h3>📊 Column Guide <button class="help-btn" onclick="this.parentElement.nextElementSibling.style.display=this.parentElement.nextElementSibling.style.display?'none':'block'">Show/Hide</button></h3>
+            <dl style="display:none;">
+                <dt>Odds</dt>
+                <dd>Decimal odds from sportsbook. Higher = more risk.</dd>
+                
+                <dt>Model %</dt>
+                <dd>Our calculated probability of this bet winning (0-100%).</dd>
+                
+                <dt>Edge</dt>
+                <dd>Model % minus Implied %. Positive = value bet. >3% is good.</dd>
+                
+                <dt>EV (Expected Value)</dt>
+                <dd>Average profit per R1 bet. Positive = profitable long term.</dd>
+                
+                <dt>Confidence</dt>
+                <dd>How sure we are: High (>60%), Medium (50-60%), Low (<50%)</dd>
+            </dl>
+        </div>
     </div>
     
     <footer>
