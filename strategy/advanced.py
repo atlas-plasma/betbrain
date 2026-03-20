@@ -1,114 +1,108 @@
 """
 Advanced Betting Strategy - Tier-Based with Injury Analysis
-Based on Claude's strategy methodology
 """
 
 from typing import Dict, List, Tuple
-import random
+from scipy.stats import poisson as poisson_dist
 
 
 class AdvancedStrategy:
     """Tier-based betting strategy with injury analysis."""
-    
-    # Team tiers based on win rate
-    TIERS = {
-        "elite": 0.60,      # 60%+ win rate
-        "contender": 0.50,  # 50-59%
-        "bubble": 0.44,     # 44-50%
-        "struggling": 0.44  # <44%
-    }
-    
+
+    # Minimum games before trusting a team's win rate
+    MIN_GAMES_FOR_FULL_TRUST = 20
+
     # Injury impact scores
     INJURY_IMPACT = {
         3: "High - Top player, significantly impacts team",
         2: "Moderate - Depth player, noticeable impact",
         1: "Low - 4th liner, minimal impact"
     }
-    
+
     def __init__(self):
-        self.teams = self._load_team_tiers()
-    
-    def _load_team_tiers(self) -> Dict[str, str]:
-        """Assign tiers to teams."""
-        # Based on typical NHL standings - would be dynamic in production
-        return {
-            # Elite (60%+)
-            "COL": "elite", "CAR": "elite", "DAL": "elite", 
-            "TBL": "elite", "WSH": "elite", "NJ": "elite",
-            # Contender (50-59%)
-            "MIN": "contender", "NYI": "contender", "PIT": "contender",
-            "OTT": "contender", "EDM": "contender", "BOS": "contender",
-            "MTL": "contender", "DET": "contender", "VGK": "contender",
-            # Bubble (44-50%)
-            "NSH": "bubble", "SEA": "bubble", "UTA": "bubble",
-            "SJS": "bubble", "PHI": "bubble", "CBJ": "bubble",
-            "BUF": "bubble", "STL": "bubble", "LAK": "bubble",
-            # Struggling (<44%)
-            "CHI": "struggling", "WPG": "struggling", "CGY": "struggling",
-            "VAN": "struggling", "ANA": "struggling", "ARI": "struggling",
-            "FLA": "contender",  # Florida is strong
-        }
-    
-    def get_team_tier(self, team: str) -> str:
-        """Get team's tier."""
-        return self.teams.get(team, "bubble")
+        pass
+
+    def get_team_tier(self, team: str, win_rate: float = None) -> str:
+        """Derive tier dynamically from win rate.
+
+        win_rate is required for accurate classification.  Falls back to
+        "bubble" (the neutral default) when unavailable.
+        """
+        if win_rate is None:
+            return "bubble"
+        if win_rate >= 0.60:
+            return "elite"
+        elif win_rate >= 0.50:
+            return "contender"
+        elif win_rate >= 0.44:
+            return "bubble"
+        else:
+            return "struggling"
     
     def analyze_ml(self, home: str, away: str, 
                    home_stats: Dict, away_stats: Dict,
                    injuries: Dict) -> Dict:
         """Analyze moneyline bet."""
-        
-        home_tier = self.get_team_tier(home)
-        away_tier = self.get_team_tier(away)
-        
+
         home_wr = home_stats.get("win_rate", 0.5)
         away_wr = away_stats.get("win_rate", 0.5)
-        
-        # Calculate base probability from tiers
+
+        # Bayesian shrinkage: if sample is small, regress win rate toward 0.5
+        home_gp = home_stats.get("games_played", self.MIN_GAMES_FOR_FULL_TRUST)
+        away_gp = away_stats.get("games_played", self.MIN_GAMES_FOR_FULL_TRUST)
+        home_trust = min(1.0, home_gp / self.MIN_GAMES_FOR_FULL_TRUST)
+        away_trust = min(1.0, away_gp / self.MIN_GAMES_FOR_FULL_TRUST)
+        home_wr = 0.5 + (home_wr - 0.5) * home_trust
+        away_wr = 0.5 + (away_wr - 0.5) * away_trust
+
+        # Derive tiers from actual current win rates (not hardcoded lookup)
+        home_tier = self.get_team_tier(home, home_wr)
+        away_tier = self.get_team_tier(away, away_wr)
+
+        # Tier advantage adds a small signal on top of the raw win-rate difference.
+        # Values are conservative: a win-rate spread already captures most of the
+        # matchup quality; tiers add only the structural matchup adjustment.
         tier_advantage = {
-            ("elite", "struggling"): 0.15,
-            ("elite", "bubble"): 0.10,
-            ("elite", "contender"): 0.05,
-            ("contender", "struggling"): 0.10,
-            ("contender", "bubble"): 0.05,
-            ("bubble", "struggling"): 0.05,
+            ("elite", "struggling"): 0.08,
+            ("elite", "bubble"): 0.05,
+            ("elite", "contender"): 0.02,
+            ("contender", "struggling"): 0.05,
+            ("contender", "bubble"): 0.02,
+            ("bubble", "struggling"): 0.02,
         }
-        
-        # Base probability from win rate
+
         base_home = home_wr
         base_away = away_wr
-        
-        # Add tier adjustment
+
         tier_key = (home_tier, away_tier)
         if tier_key in tier_advantage:
             base_home += tier_advantage[tier_key]
-        
+
         # Injury impact
         home_inj_impact = self._calculate_injury_impact(home, injuries)
         away_inj_impact = self._calculate_injury_impact(away, injuries)
-        
+
         base_home -= away_inj_impact * 0.02
         base_away += home_inj_impact * 0.02
-        
+
         # Normalize
         total = base_home + base_away
         home_prob = base_home / total if total > 0 else 0.5
         away_prob = 1 - home_prob
-        
+
         # Determine confidence
         tier_diff = self._get_tier_strength(home_tier) - self._get_tier_strength(away_tier)
-        
+
         if abs(tier_diff) >= 2 and home_prob > 0.65:
             confidence = "high"
         elif home_prob > 0.55:
             confidence = "medium"
         else:
             confidence = "low"
-        
-        # Generate reasoning
-        reasoning = self._generate_reasoning(home, away, home_tier, away_tier, 
-                                           home_stats, away_stats, injuries)
-        
+
+        reasoning = self._generate_reasoning(home, away, home_tier, away_tier,
+                                             home_stats, away_stats, injuries)
+
         return {
             "home_prob": home_prob,
             "away_prob": away_prob,
@@ -176,8 +170,14 @@ class AdvancedStrategy:
         # Calculate expected goals
         home_gf = home_stats.get("goals_for_avg", 2.8)
         away_gf = away_stats.get("goals_for_avg", 2.8)
-        
-        expected_total = home_gf + away_gf
+        home_ga = home_stats.get("goals_against_avg", 2.8)
+        away_ga = away_stats.get("goals_against_avg", 2.8)
+
+        # Blend attack vs opponent defence for each side
+        pred_home_goals = round((home_gf + away_ga) / 2, 1)
+        pred_away_goals = round((away_gf + home_ga) / 2, 1)
+
+        expected_total = pred_home_goals + pred_away_goals
         
         # Adjust for injuries to high-scoring players
         home_inj = injuries.get(home, [])
@@ -194,24 +194,34 @@ class AdvancedStrategy:
         
         # Over/Under line is typically 6.5 for NHL
         line = 6.5
-        over_prob = 1 / (1 + (line / expected_total))
-        
-        # Confidence based on deviation from line
+
+        # Use Poisson CDF: P(total goals > line) where total ~ Poisson(expected_total).
+        # poisson_dist.cdf(k, mu) = P(X <= k), so P(X > line) = 1 - P(X <= floor(line)).
+        expected_total = max(0.1, expected_total)
+        over_prob = 1.0 - poisson_dist.cdf(int(line), expected_total)
+        under_prob = 1.0 - over_prob
+
+        # Confidence based on how far expected total is from the line
         diff = abs(expected_total - line)
-        
+
         if diff > 1.0:
             confidence = "high"
         elif diff > 0.5:
             confidence = "medium"
         else:
             confidence = "low"
-        
+
         return {
             "expected": expected_total,
             "line": line,
             "over_prob": over_prob,
+            "under_prob": under_prob,
+            "predicted_total": round(expected_total, 1),
+            "home_goals": pred_home_goals,
+            "away_goals": pred_away_goals,
+            "score_pred": f"{pred_home_goals} - {pred_away_goals}",
             "confidence": confidence,
-            "reasoning": f"Expected {expected_total:.1f} goals vs line {line}"
+            "reasoning": f"Projected {pred_home_goals} - {pred_away_goals} ({expected_total:.1f} total) vs line {line}",
         }
 
 

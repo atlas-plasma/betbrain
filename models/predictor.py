@@ -2,6 +2,7 @@
 Prediction Models for Sports Betting
 """
 
+import math
 import numpy as np
 from typing import Dict, List, Tuple, Optional
 from dataclasses import dataclass
@@ -71,11 +72,16 @@ class PoissonModel:
         )
     
     def _poisson_probs(self, lambda_: float, max_goals: int) -> np.ndarray:
-        """Calculate Poisson probability distribution."""
+        """Calculate Poisson probability mass function up to max_goals.
+
+        Do NOT normalize: the raw PMF values are needed for accurate win/draw
+        and over/under probability calculations.  For typical NHL lambdas (~3),
+        P(goals >= 10) < 0.001 so truncation error is negligible.
+        """
         probs = np.zeros(max_goals)
         for i in range(max_goals):
-            probs[i] = (lambda_ ** i * np.exp(-lambda_)) / np.math.factorial(i)
-        return probs / probs.sum()
+            probs[i] = (lambda_ ** i * np.exp(-lambda_)) / math.factorial(i)
+        return probs
     
     def _calculate_confidence(self, home_win: float, away_win: float) -> str:
         """Determine confidence level."""

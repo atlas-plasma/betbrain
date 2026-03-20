@@ -3,7 +3,6 @@ Strategy selector for different betting approaches
 """
 
 from typing import Dict, List
-import random
 
 
 class StrategySelector:
@@ -65,9 +64,6 @@ class StrategySelector:
             return edge > 0.05
         
         elif strategy == "tier_based":
-            # Realistic confidence cap (max 70-75% for NHL)
-            if confidence == "high" and random.random() < 0.3:
-                confidence = "medium"  # Realistic adjustment
             return edge > 0.03
         
         elif strategy == "model_plus":

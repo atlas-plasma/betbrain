@@ -56,96 +56,122 @@ class NHLDataFetcher:
             "TBL": "Tampa Bay Lightning",
         }
     
-    def get_schedule(self, days_forward: int = 7) -> List[Dict]:
-        """Get upcoming games - try API first, fallback to demo data."""
-        
+    def get_schedule(self, days_forward: int = 21) -> List[Dict]:
+        """Get upcoming games - uses NHL API v1 (gameWeek structure)."""
+
         try:
-            # Try to get today's games
-            url = f"{self.BASE_URL}/api/clubs/schedule/now"
-            resp = self.session.get(url, timeout=5)
-            
+            url = f"{self.BASE_URL}/v1/schedule/now"
+            resp = self.session.get(url, timeout=8)
+
             if resp.status_code == 200:
                 data = resp.json()
                 games = []
-                
-                if "games" in data:
-                    for game in data["games"]:
-                        # Try to get game start time
-                        start_time = ""
-                        if "startTimeUTC" in game:
-                            try:
-                                utc_time = datetime.fromisoformat(game["startTimeUTC"].replace("Z", "+00:00"))
-                                # Convert to SA time (GMT+2)
-                                sa_time = utc_time.astimezone(datetime.now().astimezone().tzinfo)
-                                start_time = sa_time.strftime("%H:%M")
-                            except:
-                                pass
-                        
-                        # Only include today's games (not past)
-                        game_date = game.get("gameDate", "")
-                        if game_date and game_date != datetime.now().strftime("%Y-%m-%d"):
+
+                for day in data.get("gameWeek", []):
+                    day_date = day.get("date", "")
+                    for game in day.get("games", []):
+                        # Skip games that are already final
+                        state = game.get("gameState", "")
+                        if state in ("OFF", "FINAL"):
                             continue
-                        
+
+                        start_time = ""
+                        utc_str = game.get("startTimeUTC", "")
+                        if utc_str:
+                            try:
+                                utc_time = datetime.fromisoformat(utc_str.replace("Z", "+00:00"))
+                                local_time = utc_time.astimezone(datetime.now().astimezone().tzinfo)
+                                start_time = local_time.strftime("%H:%M")
+                            except Exception:
+                                pass
+
                         games.append({
-                            "date": datetime.now().strftime("%Y-%m-%d"),
+                            "date": day_date,
                             "home_team": game.get("homeTeam", {}).get("abbrev"),
                             "away_team": game.get("awayTeam", {}).get("abbrev"),
                             "home_id": game.get("homeTeam", {}).get("id"),
                             "away_id": game.get("awayTeam", {}).get("id"),
                             "start_time": start_time,
                         })
-                
+
                 if games:
-                    return games
+                    games.sort(key=lambda x: x.get("date"))
+                    return games[:days_forward]
         except Exception as e:
-            print(f"API error: {e}")
-        
-        # Fallback to demo data if API fails
-        return self._get_demo_games()
+            print(f"Schedule API error: {e}")
+
+        return self._get_demo_games(days_forward)
+
     
-    def _get_demo_games(self) -> List[Dict]:
+    def _get_demo_games(self, days_forward: int = 5) -> List[Dict]:
         """Generate demo games for testing."""
         teams = list(self.get_team_abbr_map().keys())
-        
-        # Typical NHL game times in SA (UTC+2) - games start between 02:00-04:30 SA
+
         game_times_sa = ["02:00", "02:30", "03:00", "03:30", "04:00", "04:30"]
-        
+
         games = []
-        for i in range(5):
+        for i in range(days_forward):
             home = random.choice(teams)
             away = random.choice([t for t in teams if t != home])
             games.append({
-                "date": datetime.now().strftime("%Y-%m-%d"),
+                "date": (datetime.now() + timedelta(days=i)).strftime("%Y-%m-%d"),
                 "home_team": home,
                 "away_team": away,
                 "start_time": random.choice(game_times_sa),
             })
-        
+
         return games
     
-    def get_team_stats(self, team_abbr: str) -> Dict:
-        """Get team statistics - try API first, fallback to realistic demo data."""
-        
+    def _load_standings(self) -> Dict[str, Dict]:
+        """Fetch all team standings in one API call and cache by abbrev."""
+        if hasattr(self, '_standings_cache') and self._standings_cache:
+            return self._standings_cache
         try:
-            # Try to get team stats from API
-            url = f"{self.BASE_URL}/api/club-stats/{team_abbr}/now"
-            resp = self.session.get(url, timeout=5)
-            
+            url = f"{self.BASE_URL}/v1/standings/now"
+            resp = self.session.get(url, timeout=8)
             if resp.status_code == 200:
-                data = resp.json()
-                # Parse API response
-                return {
-                    "team": team_abbr,
-                    "games_played": data.get("gamesPlayed", 0),
-                    "wins": data.get("wins", 0),
-                    "losses": data.get("losses", 0),
-                    "ot": data.get("ot", 0),
-                    "goals_for": data.get("goalsFor", 0),
-                    "goals_against": data.get("goalsAgainst", 0),
-                }
+                cache = {}
+                for t in resp.json().get("standings", []):
+                    abbrev_raw = t.get("teamAbbrev", {})
+                    abbrev = abbrev_raw.get("default", "") if isinstance(abbrev_raw, dict) else str(abbrev_raw)
+                    if not abbrev:
+                        continue
+                    gp = max(1, t.get("gamesPlayed", 1))
+                    wins = t.get("wins", 0)
+                    gf = t.get("goalFor", 0)
+                    ga = t.get("goalAgainst", 0)
+                    wl10 = t.get("l10Wins", wins)  # last 10 wins
+                    cache[abbrev] = {
+                        "team": abbrev,
+                        "games_played": gp,
+                        "wins": wins,
+                        "losses": t.get("losses", 0),
+                        "ot": t.get("otLosses", 0),
+                        "goals_for": gf,
+                        "goals_against": ga,
+                        "win_rate": wins / gp,
+                        "home_win_rate": min(0.90, wins / gp + 0.05),
+                        "away_win_rate": max(0.05, wins / gp - 0.05),
+                        "goals_for_avg": gf / gp,
+                        "goals_against_avg": ga / gp,
+                        "form": wl10 / 10 if wl10 else wins / gp,
+                        # Placeholder special teams — filled in below if available
+                        "powerplay_pct": 20,
+                        "penalty_kill_pct": 80,
+                        "save_pct": 0.910,
+                    }
+                self._standings_cache = cache
+                return cache
         except Exception as e:
-            print(f"API error for {team_abbr}: {e}")
-        
+            print(f"Standings API error: {e}")
+        self._standings_cache = {}
+        return {}
+
+    def get_team_stats(self, team_abbr: str) -> Dict:
+        """Get real team statistics from NHL standings API."""
+        standings = self._load_standings()
+        if team_abbr in standings:
+            return standings[team_abbr]
         # Fallback to realistic demo stats
         return self._get_demo_stats(team_abbr)
     

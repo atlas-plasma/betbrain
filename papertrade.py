@@ -36,63 +36,87 @@ class PaperTrader:
                 "updated": datetime.now().isoformat()
             }, f, indent=2)
     
-    def place_bet(self, match: str, market: str, odds: float, stake: float, 
+    def place_bet(self, match: str, market: str, odds: float, stake: float,
                   prediction: float, reasoning: str = "") -> Dict:
-        """Place a paper bet."""
-        
+        """Place a paper bet.
+
+        ``odds`` is recorded as the opening odds.  When settling, pass the
+        closing odds so we can compute Closing Line Value (CLV).
+        """
+
         if stake > self.bankroll:
             return {"error": "Insufficient bankroll"}
-        
-        # Deduct stake
+
         self.bankroll -= stake
-        
+
         bet = {
             "id": len(self.bets) + 1,
             "timestamp": datetime.now().isoformat(),
             "match": match,
             "market": market,
+            "opening_odds": odds,   # odds at bet placement
             "odds": odds,
             "stake": stake,
             "prediction": prediction,
             "reasoning": reasoning,
-            "status": "pending",  # pending, won, lost
-            "profit": 0
+            "status": "pending",    # pending, won, lost
+            "profit": 0,
+            "closing_odds": None,   # filled in at settlement
+            "clv": None,            # closing line value (>1 = beat the close)
         }
-        
+
         self.bets.append(bet)
         self._save_history()
-        
+
         return bet
-    
-    def settle_bet(self, bet_id: int, won: bool):
-        """Settle a bet after game result."""
-        
+
+    def settle_bet(self, bet_id: int, won: bool, closing_odds: float = None):
+        """Settle a bet after game result.
+
+        Args:
+            bet_id:       ID of the bet to settle.
+            won:          Whether the bet won.
+            closing_odds: Final market odds just before game start.  When
+                          provided, CLV = opening_odds / closing_odds.  A value
+                          >1 means we got better than closing price (positive CLV).
+        """
+
         for bet in self.bets:
             if bet["id"] == bet_id and bet["status"] == "pending":
                 if won:
-                    # Win: get stake * odds
                     profit = bet["stake"] * (bet["odds"] - 1)
                     self.bankroll += bet["stake"] + profit
                     bet["profit"] = profit
                 else:
-                    # Loss: lose stake
                     bet["profit"] = -bet["stake"]
-                
+
                 bet["status"] = "won" if won else "lost"
+
+                if closing_odds and closing_odds > 1:
+                    bet["closing_odds"] = closing_odds
+                    bet["clv"] = round(bet["opening_odds"] / closing_odds, 4)
+
                 self._save_history()
                 return bet
-        
+
         return {"error": "Bet not found"}
     
     def get_status(self) -> Dict:
-        """Get current paper trading status."""
-        
+        """Get current paper trading status including Closing Line Value (CLV).
+
+        CLV > 1 on average means bets were placed at better-than-closing odds,
+        which is the strongest leading indicator of long-term profitability.
+        """
+
         settled = [b for b in self.bets if b["status"] != "pending"]
         won = sum(1 for b in settled if b["status"] == "won")
         lost = sum(1 for b in settled if b["status"] == "lost")
-        
+
         total_profit = sum(b.get("profit", 0) for b in self.bets)
-        
+
+        clv_values = [b["clv"] for b in self.bets if b.get("clv") is not None]
+        avg_clv = round(sum(clv_values) / len(clv_values), 4) if clv_values else None
+
         return {
             "bankroll": self.bankroll,
             "initial_bankroll": self.initial_bankroll,
@@ -102,7 +126,9 @@ class PaperTrader:
             "pending_bets": sum(1 for b in self.bets if b["status"] == "pending"),
             "won": won,
             "lost": lost,
-            "win_rate": won / len(settled) if settled else 0
+            "win_rate": won / len(settled) if settled else 0,
+            "avg_clv": avg_clv,
+            "clv_sample_size": len(clv_values),
         }
     
     def get_pending_bets(self) -> List[Dict]:

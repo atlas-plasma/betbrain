@@ -3,103 +3,324 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>BetBrain - Backtest</title>
+    <title>BetBrain — Backtest</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        :root { --primary: #00d4aa; --success: #22c55e; --danger: #ef4444; --bg: #0f0f23; --surface: #1a1a2e; --text: #e2e8f0; --text2: #94a3b8; }
-        body { font-family: 'Inter', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
-        nav { background: var(--surface); padding: 1rem 2rem; display: flex; justify-content: space-between; border-bottom: 1px solid rgba(255,255,255,0.1); }
-        nav a { color: var(--text2); text-decoration: none; margin-left: 2rem; }
-        nav a:hover, nav a.active { color: var(--primary); }
-        nav .logo { font-size: 1.5rem; font-weight: 700; color: var(--primary); }
-        .container { max-width: 900px; margin: 2rem auto; padding: 2rem; }
-        h1 { margin-bottom: 0.5rem; }
-        .subtitle { color: var(--text2); margin-bottom: 2rem; }
-        .stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; margin-bottom: 2rem; }
-        .stat-card { background: var(--surface); padding: 1.5rem; border-radius: 12px; text-align: center; }
-        .stat-value { font-size: 2rem; font-weight: 700; }
-        .stat-value.success { color: var(--success); }
-        .stat-value.danger { color: var(--danger); }
-        .stat-label { color: var(--text2); font-size: 0.875rem; margin-top: 0.5rem; }
-        table { width: 100%; border-collapse: collapse; background: var(--surface); border-radius: 12px; overflow: hidden; }
-        th, td { padding: 0.75rem; text-align: left; }
-        th { background: #16213e; color: var(--text2); font-size: 0.75rem; text-transform: uppercase; }
-        tr { border-bottom: 1px solid rgba(255,255,255,0.05); }
-        .positive { color: var(--success); }
-        .negative { color: var(--danger); }
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+        :root {
+            --brand: #CF4E2E; --brand-light: #F5E6E2; --brand-mid: #E8917D;
+            --bg: #F9F7F4; --surface: #FFFFFF; --surface2: #F3F1EE;
+            --border: #E5E2DC; --text: #1A1816; --text2: #6B6560; --text3: #A09A94;
+            --success: #2D7A4F; --success-bg: #E8F5EE; --danger: #C0392B;
+            --danger-bg: #FDE8E8; --warning: #A0622A; --warning-bg: #FEF3E8;
+            --shadow-sm: 0 1px 3px rgba(0,0,0,0.06); --shadow: 0 4px 12px rgba(0,0,0,0.07);
+            --radius: 10px;
+        }
+        body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+
+        nav { background: var(--surface); border-bottom: 1px solid var(--border); padding: 0 2rem; display: flex; justify-content: space-between; align-items: center; height: 56px; position: sticky; top: 0; z-index: 100; box-shadow: var(--shadow-sm); }
+        .logo { font-size: 1.1rem; font-weight: 700; color: var(--brand); letter-spacing: -0.02em; display: flex; align-items: center; gap: 0.5rem; }
+        .nav-links { display: flex; gap: 0.25rem; }
+        .nav-links a { padding: 0.4rem 0.85rem; border-radius: 6px; color: var(--text2); text-decoration: none; font-size: 0.875rem; font-weight: 500; transition: all 0.15s; }
+        .nav-links a:hover { background: var(--surface2); color: var(--text); }
+        .nav-links a.active { background: var(--brand-light); color: var(--brand); }
+
+        .container { max-width: 1440px; margin: 0 auto; padding: 1.75rem 2rem; }
+        .page-title { font-size: 1.4rem; font-weight: 700; color: var(--text); margin-bottom: 1.25rem; letter-spacing: -0.02em; }
+
+        .toolbar {
+            background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+            padding: 0.875rem 1.25rem; display: flex; gap: 0.75rem; align-items: center;
+            flex-wrap: wrap; margin-bottom: 1.5rem; box-shadow: var(--shadow-sm);
+        }
+        .toolbar label { font-size: 0.8rem; font-weight: 600; color: var(--text2); text-transform: uppercase; letter-spacing: 0.04em; }
+        .toolbar select, .toolbar input[type="date"] {
+            padding: 0.4rem 0.75rem; background: var(--bg); border: 1px solid var(--border);
+            color: var(--text); border-radius: 6px; font-size: 0.875rem; font-family: inherit;
+        }
+        .toolbar button {
+            padding: 0.45rem 1.1rem; background: var(--brand); color: white; border: none;
+            border-radius: 6px; font-size: 0.875rem; font-weight: 600; cursor: pointer;
+            font-family: inherit; transition: background 0.15s;
+        }
+        .toolbar button:hover:not(:disabled) { background: #B84228; }
+        .toolbar button:disabled { opacity: 0.6; cursor: not-allowed; }
+
+        /* Loading */
+        #loading { display: none; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 2rem; text-align: center; margin-bottom: 1.5rem; box-shadow: var(--shadow-sm); }
+        .loading-title { font-size: 1.1rem; font-weight: 600; color: var(--brand); margin-bottom: 0.5rem; }
+        .loading-sub { color: var(--text2); font-size: 0.875rem; }
+        .progress-track { margin: 1rem auto 0; width: 240px; height: 4px; background: var(--surface2); border-radius: 2px; overflow: hidden; }
+        .progress-bar { height: 100%; width: 0%; background: var(--brand); border-radius: 2px; transition: width 0.3s; }
+
+        /* Stats grid */
+        .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 0.875rem; margin-bottom: 1.5rem; }
+        .stat-card { background: var(--surface); border: 1px solid var(--border); padding: 1.1rem 1.25rem; border-radius: var(--radius); box-shadow: var(--shadow-sm); }
+        .stat-value { font-size: 1.75rem; font-weight: 700; letter-spacing: -0.03em; line-height: 1; }
+        .stat-value.up { color: var(--success); }
+        .stat-value.down { color: var(--danger); }
+        .stat-value.neutral { color: var(--brand); }
+        .stat-label { color: var(--text2); font-size: 0.78rem; margin-top: 0.35rem; font-weight: 500; }
+
+        /* Charts */
+        .charts { display: grid; grid-template-columns: 2fr 1fr; gap: 1rem; margin-bottom: 1.5rem; }
+        .chart-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 1.1rem 1.25rem; box-shadow: var(--shadow-sm); }
+        .chart-title { font-size: 0.82rem; font-weight: 600; color: var(--text2); margin-bottom: 0.75rem; text-transform: uppercase; letter-spacing: 0.04em; }
+
+        /* Table */
+        .table-wrap { overflow-x: auto; border-radius: var(--radius); box-shadow: var(--shadow); border: 1px solid var(--border); }
+        table { width: 100%; border-collapse: collapse; background: var(--surface); font-size: 0.84rem; }
+        thead tr { background: var(--surface2); border-bottom: 2px solid var(--border); }
+        th { padding: 0.6rem 0.85rem; text-align: left; color: var(--text2); font-size: 0.71rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; white-space: nowrap; }
+        td { padding: 0.6rem 0.85rem; border-bottom: 1px solid var(--border); white-space: nowrap; }
+        tr:last-child td { border-bottom: none; }
+        tr.win-row { background: #F0FAF5; }
+        tr.win-row:hover { background: #E4F5EC; }
+        tr:not(.win-row):hover { background: var(--surface2); }
+
+        .positive { color: var(--success); font-weight: 600; }
+        .negative { color: var(--danger); font-weight: 600; }
+        .muted { color: var(--text2); }
+
+        .badge { display: inline-flex; align-items: center; padding: 0.18rem 0.55rem; border-radius: 20px; font-size: 0.68rem; font-weight: 700; letter-spacing: 0.02em; }
+        .badge-win { background: var(--success-bg); color: var(--success); }
+        .badge-loss { background: var(--danger-bg); color: var(--danger); }
+        .badge-real { background: var(--success-bg); color: var(--success); }
+        .badge-sim { background: var(--warning-bg); color: var(--warning); }
+
+        .legend { background: var(--surface); border: 1px solid var(--border); border-left: 3px solid var(--brand); border-radius: var(--radius); padding: 0.7rem 1rem; margin-bottom: 0.875rem; display: flex; gap: 1.5rem; flex-wrap: wrap; font-size: 0.77rem; color: var(--text2); box-shadow: var(--shadow-sm); }
+        .legend strong { color: var(--brand); font-weight: 600; }
+
+        footer { text-align: center; padding: 2rem; color: var(--text3); font-size: 0.78rem; border-top: 1px solid var(--border); margin-top: 2rem; }
+
+        @media (max-width: 900px) { .charts { grid-template-columns: 1fr; } }
     </style>
 </head>
 <body>
-    <nav>
-        <div class="logo">🏆 BetBrain</div>
-        <div>
-            <a href="/">Analysis</a>
-            <a href="/backtest" class="active">Backtest</a>
-            <a href="/paper">Paper Trade</a>
+
+<nav>
+    <div class="logo">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="#CF4E2E" stroke-width="2"/><path d="M8 12l3 3 5-5" stroke="#CF4E2E" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        BetBrain
+    </div>
+    <div class="nav-links">
+        <a href="/">Analysis</a>
+        <a href="/backtest" class="active">Backtest</a>
+        <a href="/paper">Paper Trade</a>
+    </div>
+</nav>
+
+<div class="container">
+    <div class="page-title">Strategy Backtest</div>
+
+    <div class="toolbar">
+        <form method="get" id="bt-form" style="display:contents;" onsubmit="startLoading()">
+            <label>Strategy</label>
+            <select name="strategy">
+                {% for key, desc in strategies.items() %}
+                <option value="{{ key }}" {{ 'selected' if strategy == key else '' }}>{{ desc }}</option>
+                {% endfor %}
+            </select>
+            <label>From</label>
+            <input type="date" name="start" value="{{ start }}">
+            <label>To</label>
+            <input type="date" name="end" value="{{ end }}">
+            <button type="submit" id="run-btn">Run Backtest</button>
+        </form>
+        <span style="font-size:0.78rem; color:var(--text3); margin-left:auto;">NHL · uses real game results from the NHL API</span>
+    </div>
+
+    <div id="loading">
+        <div class="loading-title">⏳ Fetching real NHL results…</div>
+        <div class="loading-sub">Pulling historical game data from the NHL API — this takes a few seconds</div>
+        <div class="progress-track">
+            <div class="progress-bar" id="progress-bar"></div>
         </div>
-    </nav>
-    <div class="container">
-        <h1>📈 Backtest Results</h1>
-        <p class="subtitle">{{ sport|upper }} | Strategy: <strong>{{ strategy }}</strong> | {{ start }} to {{ end }}</p>
-        
-        <div class="strategy-selector" style="margin-bottom: 2rem;">
-            <form method="get" style="display:flex;gap:1rem;align-items:center;flex-wrap:wrap;">
-                <label style="color:var(--text2);">Strategy:</label>
-                <select name="strategy" style="padding:0.5rem;background:var(--surface);color:var(--text);border:1px solid rgba(255,255,255,0.1);border-radius:6px;">
-                    {% for key, desc in strategies.items() %}
-                    <option value="{{ key }}" {{ 'selected' if strategy == key else '' }}>{{ desc }}</option>
-                    {% endfor %}
-                </select>
-                <input type="date" name="start" value="{{ start }}" style="padding:0.5rem;background:var(--surface);color:var(--text);border:1px solid rgba(255,255,255,0.1);border-radius:6px;">
-                <input type="date" name="end" value="{{ end }}" style="padding:0.5rem;background:var(--surface);color:var(--text);border:1px solid rgba(255,255,255,0.1);border-radius:6px;">
-                <button type="submit" style="padding:0.5rem 1rem;background:var(--primary);color:var(--bg);border:none;border-radius:6px;cursor:pointer;font-weight:600;">Run Backtest</button>
-            </form>
+    </div>
+
+    <script>
+    function startLoading() {
+        document.getElementById('loading').style.display = 'block';
+        document.getElementById('run-btn').disabled = true;
+        document.getElementById('run-btn').textContent = 'Running…';
+        let w = 0;
+        const bar = document.getElementById('progress-bar');
+        const iv = setInterval(() => {
+            w = Math.min(w + Math.random() * 7, 90);
+            bar.style.width = w + '%';
+            if (w >= 90) clearInterval(iv);
+        }, 300);
+    }
+    </script>
+
+    {% if results and results.metrics %}
+    {% set m = results.metrics %}
+    <div class="stats-grid">
+        <div class="stat-card">
+            <div class="stat-value {{ 'up' if m.roi > 0 else 'down' }}">{{ "%.1f"|format(m.roi) }}%</div>
+            <div class="stat-label">ROI</div>
         </div>
-        
-        <div class="stats-grid">
-            <div class="stat-card">
-                <div class="stat-value {{ 'success' if results.metrics.roi > 0 else 'danger' }}">
-                    {{ "%.1f"|format(results.metrics.roi) }}%
-                </div>
-                <div class="stat-label">ROI</div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-value">{{ results.metrics.total_bets }}</div>
-                <div class="stat-label">Total Bets</div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-value {{ 'success' if results.metrics.win_rate > 0.5 else '' }}">
-                    {{ "%.1f"|format(results.metrics.win_rate * 100) }}%
-                </div>
-                <div class="stat-label">Win Rate</div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-value">${{ "%.0f"|format(results.metrics.final_bankroll) }}</div>
-                <div class="stat-label">Final Bankroll</div>
-            </div>
+        <div class="stat-card">
+            <div class="stat-value {{ 'up' if m.profit > 0 else 'down' }}">${{ "%.0f"|format(m.profit) }}</div>
+            <div class="stat-label">Profit / Loss</div>
         </div>
-        
-        <h2 style="margin-bottom:1rem;">Recent Bets</h2>
+        <div class="stat-card">
+            <div class="stat-value neutral">{{ m.total_bets }}</div>
+            <div class="stat-label">Total Bets</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value {{ 'up' if m.win_rate > 0.5 else '' }}">{{ "%.1f"|format(m.win_rate * 100) }}%</div>
+            <div class="stat-label">Win Rate</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value neutral">${{ "%.0f"|format(m.final_bankroll) }}</div>
+            <div class="stat-label">Final Bankroll</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value down">{{ "%.1f"|format(m.max_drawdown) }}%</div>
+            <div class="stat-label">Max Drawdown</div>
+        </div>
+    </div>
+
+    {% if results.results %}
+    <div class="charts">
+        <div class="chart-card">
+            <div class="chart-title">Bankroll Over Time</div>
+            <canvas id="bankrollChart" height="90"></canvas>
+        </div>
+        <div class="chart-card">
+            <div class="chart-title">Win / Loss by Day</div>
+            <canvas id="wlChart" height="90"></canvas>
+        </div>
+    </div>
+
+    <script>
+    (function() {
+        const bets = {{ results.results | tojson }};
+
+        // Bankroll curve
+        new Chart(document.getElementById('bankrollChart'), {
+            type: 'line',
+            data: {
+                labels: bets.map((b, i) => i + 1),
+                datasets: [{
+                    data: bets.map(b => b.bankroll),
+                    borderColor: '#CF4E2E',
+                    backgroundColor: 'rgba(207,78,46,0.06)',
+                    borderWidth: 2,
+                    pointRadius: 0,
+                    fill: true,
+                    tension: 0.3
+                }]
+            },
+            options: {
+                plugins: { legend: { display: false } },
+                scales: {
+                    x: { display: false },
+                    y: { ticks: { color: '#6B6560', font: { size: 11 } }, grid: { color: 'rgba(0,0,0,0.05)' } }
+                }
+            }
+        });
+
+        // Win/Loss bar chart
+        const dayMap = {};
+        bets.forEach(b => {
+            if (!dayMap[b.date]) dayMap[b.date] = { w: 0, l: 0 };
+            b.won ? dayMap[b.date].w++ : dayMap[b.date].l++;
+        });
+        const days = Object.keys(dayMap).sort();
+        new Chart(document.getElementById('wlChart'), {
+            type: 'bar',
+            data: {
+                labels: days.map(d => d.slice(5)),
+                datasets: [
+                    { label: 'Win', data: days.map(d => dayMap[d].w), backgroundColor: 'rgba(45,122,79,0.75)', borderRadius: 3 },
+                    { label: 'Loss', data: days.map(d => -dayMap[d].l), backgroundColor: 'rgba(192,57,43,0.65)', borderRadius: 3 }
+                ]
+            },
+            options: {
+                plugins: { legend: { labels: { color: '#6B6560', boxWidth: 10, font: { size: 11 } } } },
+                scales: {
+                    x: { stacked: true, ticks: { color: '#6B6560', maxTicksLimit: 10, font: { size: 10 } }, grid: { display: false } },
+                    y: { stacked: true, ticks: { color: '#6B6560', font: { size: 11 } }, grid: { color: 'rgba(0,0,0,0.05)' } }
+                }
+            }
+        });
+    })();
+    </script>
+
+    <div class="legend">
+        <span><strong>Model %</strong> — agent consensus win probability</span>
+        <span><strong>Market %</strong> — book's implied probability (devigged)</span>
+        <span><strong>Edge</strong> — Model minus Market; positive = value bet</span>
+        <span><strong>EV</strong> — expected profit per $1 staked</span>
+        <span><strong style="color:var(--success)">REAL</strong> — outcome from actual NHL result &nbsp;·&nbsp; <strong style="color:var(--warning)">SIM</strong> — simulated</span>
+    </div>
+
+    <div class="table-wrap">
         <table>
             <thead>
                 <tr>
-                    <th>Date</th><th>Match</th><th>Bet</th><th>Odds</th><th>Stake</th><th>Result</th><th>Profit</th>
+                    <th>#</th>
+                    <th>Date</th>
+                    <th>Match</th>
+                    <th>Bet</th>
+                    <th>Odds</th>
+                    <th>Model %</th>
+                    <th>Market %</th>
+                    <th>Edge</th>
+                    <th>EV</th>
+                    <th>Stake</th>
+                    <th>Source</th>
+                    <th>Result</th>
+                    <th>P&amp;L</th>
+                    <th>Bankroll</th>
                 </tr>
             </thead>
             <tbody>
-                {% for bet in results.results[-20:] %}
-                <tr>
-                    <td>{{ bet.date }}</td>
-                    <td>{{ bet.match }}</td>
-                    <td>{{ bet.bet }}</td>
-                    <td>{{ bet.odds }}</td>
-                    <td>${{ bet.stake }}</td>
-                    <td class="{{ 'positive' if bet.won else 'negative' }}">{{ 'WIN' if bet.won else 'LOSS' }}</td>
-                    <td class="{{ 'positive' if bet.profit > 0 else 'negative' }}">${{ "%.2f"|format(bet.profit) }}</td>
+                {% for bet in results.results %}
+                <tr class="{{ 'win-row' if bet.won else '' }}">
+                    <td class="muted">{{ loop.index }}</td>
+                    <td class="muted">{{ bet.date }}</td>
+                    <td style="font-weight:600;">{{ bet.match }}</td>
+                    <td style="color:var(--brand); font-weight:600;">{{ bet.bet }}</td>
+                    <td style="font-weight:700;">{{ "%.2f"|format(bet.odds | float) }}</td>
+                    <td class="{{ 'positive' if (bet.model_prob | float) > 50 else 'muted' }}">{{ "%.1f"|format(bet.model_prob | float) }}%</td>
+                    <td class="muted">{{ "%.1f"|format(bet.market_prob | default(100 - (bet.model_prob | float))) }}%</td>
+                    <td class="{{ 'positive' if (bet.edge | float) > 0 else 'negative' }}">{{ "%+.1f"|format(bet.edge | float) }}%</td>
+                    <td class="{{ 'positive' if (bet.ev | default(0) | float) > 0 else 'negative' }}">{{ "%+.1f"|format(bet.ev | default(0) | float) }}%</td>
+                    <td class="muted">${{ "%.2f"|format(bet.stake | float) }}</td>
+                    <td>
+                        {% if bet.get('real') %}
+                        <span class="badge badge-real">REAL</span>
+                        {% else %}
+                        <span class="badge badge-sim">SIM</span>
+                        {% endif %}
+                    </td>
+                    <td><span class="badge {{ 'badge-win' if bet.won else 'badge-loss' }}">{{ 'WIN' if bet.won else 'LOSS' }}</span></td>
+                    <td class="{{ 'positive' if (bet.profit | float) > 0 else 'negative' }}">${{ "%.2f"|format(bet.profit | float) }}</td>
+                    <td class="muted">${{ "%.0f"|format(bet.bankroll | float) }}</td>
                 </tr>
                 {% endfor %}
             </tbody>
         </table>
     </div>
+    {% else %}
+    <div style="background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:2.5rem; text-align:center; color:var(--text2);">
+        <div style="font-weight:600; margin-bottom:0.25rem;">No bets placed in this period</div>
+        <div style="font-size:0.875rem;">Try a wider date range or a lower-threshold strategy.</div>
+    </div>
+    {% endif %}
+
+    {% elif results and results.error %}
+    <div style="background:var(--danger-bg); border:1px solid var(--danger); border-radius:var(--radius); padding:1rem 1.25rem; color:var(--danger);">
+        {{ results.error }}
+    </div>
+    {% endif %}
+</div>
+
+<footer>BetBrain — For analysis purposes only. No real money. Gamble responsibly.</footer>
 </body>
 </html>

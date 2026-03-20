@@ -2,109 +2,122 @@
 Odds Processing and Value Detection
 """
 
-from typing import Dict, List, Tuple, Optional
+from typing import Dict, List, Tuple
 from dataclasses import dataclass
 import pandas as pd
+from core.entities import GameOpportunity
 
 
 @dataclass
-class BettingOpportunity:
+class BettingOpportunity(GameOpportunity):
     """A betting opportunity with analysis."""
-    match: str
-    market: str  # ml, ou, etc.
-    odds: float
-    model_prob: float
-    implied_prob: float
-    edge: float
-    ev: float  # Expected value
-    recommendation: str  # BET, SKIP
-    confidence: str
-    reasoning: str
+    pass
 
 
 class OddsProcessor:
     """Process odds and find value bets."""
-    
+
     def __init__(self, min_edge: float = 0.03, min_ev: float = 0.05):
         self.min_edge = min_edge
         self.min_ev = min_ev
-    
+
     def odds_to_prob(self, odds: float) -> float:
-        """Convert decimal odds to implied probability."""
+        """Convert decimal odds to raw implied probability (includes vig)."""
         return 1.0 / odds
-    
+
     def prob_to_odds(self, prob: float) -> float:
         """Convert probability to decimal odds."""
         return 1.0 / prob
-    
-    def calculate_edge(self, model_prob: float, odds: float) -> Tuple[float, float]:
-        """Calculate edge and expected value."""
-        implied_prob = self.odds_to_prob(odds)
-        edge = model_prob - implied_prob
-        ev = edge * odds  # EV as multiplier (e.g., 1.05 = 5% expected return)
+
+    def devig_pair(self, odds_a: float, odds_b: float) -> Tuple[float, float]:
+        """Remove bookmaker margin from a two-outcome market (multiplicative devig).
+
+        Raw implied probs sum to >1 because of the vig.  Dividing each by the
+        total gives the market's true probability estimate for each side.
+
+        Example: home 1.90, away 1.90 → raw sum 1.053 → devigged 50/50.
+        """
+        raw_a = 1.0 / odds_a
+        raw_b = 1.0 / odds_b
+        total = raw_a + raw_b
+        return raw_a / total, raw_b / total
+
+    def calculate_edge(self, model_prob: float, true_implied_prob: float, odds: float) -> Tuple[float, float]:
+        """Calculate edge and expected value against a devigged implied probability.
+
+        Args:
+            model_prob:        Our model's probability for the outcome.
+            true_implied_prob: Market's probability *after* vig removal.
+            odds:              Decimal odds (used to compute EV).
+        """
+        edge = model_prob - true_implied_prob
+        ev = edge * odds
         return edge, ev
-    
+
     def analyze_match(self, home_team: str, away_team: str,
-                     prediction, 
-                     odds_home: float = None, 
+                     prediction,
+                     odds_home: float = None,
                      odds_away: float = None,
                      odds_over: float = None,
                      odds_under: float = None) -> List[BettingOpportunity]:
         """Analyze a match for betting opportunities."""
-        
+
         opportunities = []
-        
+
         # Moneyline analysis
         if odds_home and odds_away:
-            edge_home, ev_home = self.calculate_edge(prediction.home_win_prob, odds_home)
-            edge_away, ev_away = self.calculate_edge(prediction.away_win_prob, odds_away)
-            
+            # Devig both sides together so implied probs sum to 1
+            true_implied_home, true_implied_away = self.devig_pair(odds_home, odds_away)
+
+            edge_home, ev_home = self.calculate_edge(prediction.home_win_prob, true_implied_home, odds_home)
+            edge_away, ev_away = self.calculate_edge(prediction.away_win_prob, true_implied_away, odds_away)
+
             # Home bet
             opportunities.append(BettingOpportunity(
                 match=f"{home_team} vs {away_team}",
                 market="ML (Home)",
                 odds=odds_home,
                 model_prob=prediction.home_win_prob,
-                implied_prob=self.odds_to_prob(odds_home),
+                implied_prob=true_implied_home,
                 edge=edge_home,
                 ev=ev_home,
                 recommendation="BET" if edge_home > self.min_edge and ev_home > self.min_ev else "SKIP",
                 confidence=prediction.confidence,
                 reasoning=self._get_reasoning(home_team, "home", edge_home, prediction)
             ))
-            
+
             # Away bet
             opportunities.append(BettingOpportunity(
                 match=f"{home_team} vs {away_team}",
                 market="ML (Away)",
                 odds=odds_away,
                 model_prob=prediction.away_win_prob,
-                implied_prob=self.odds_to_prob(odds_away),
+                implied_prob=true_implied_away,
                 edge=edge_away,
                 ev=ev_away,
                 recommendation="BET" if edge_away > self.min_edge and ev_away > self.min_ev else "SKIP",
                 confidence=prediction.confidence,
                 reasoning=self._get_reasoning(away_team, "away", edge_away, prediction)
             ))
-        
+
         # Over/Under analysis
         if odds_over and odds_under:
-            edge_over, ev_over = self.calculate_edge(prediction.over_prob, odds_over)
-            edge_under, ev_under = self.calculate_edge(prediction.under_prob, odds_under)
-            
+            true_implied_over, true_implied_under = self.devig_pair(odds_over, odds_under)
+            edge_over, ev_over = self.calculate_edge(prediction.over_prob, true_implied_over, odds_over)
+
             opportunities.append(BettingOpportunity(
                 match=f"{home_team} vs {away_team}",
                 market="Over 5.5",
                 odds=odds_over,
                 model_prob=prediction.over_prob,
-                implied_prob=self.odds_to_prob(odds_over),
+                implied_prob=true_implied_over,
                 edge=edge_over,
                 ev=ev_over,
                 recommendation="BET" if edge_over > self.min_edge else "SKIP",
                 confidence=prediction.confidence,
                 reasoning=f"Expected {prediction.expected_home_goals + prediction.expected_away_goals:.1f} goals"
             ))
-        
+
         return opportunities
     
     def _get_reasoning(self, team: str, side: str, edge: float, prediction) -> str:
