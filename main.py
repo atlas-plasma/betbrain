@@ -13,6 +13,7 @@ sys.path.insert(0, str(PROJECT_ROOT))
 import config
 from data.nhl import NHLDataFetcher
 from models.predictor import get_model
+from research.agent import ResearchAgent
 from odds.scanner import OddsProcessor, StrategyManager
 from strategy.advanced import create_strategy
 
@@ -26,6 +27,7 @@ class BetBrain:
         self.odds_processor = OddsProcessor()
         self.strategy = create_strategy()  # Advanced tier-based strategy
         self.data_fetcher = NHLDataFetcher()
+        self.researcher = ResearchAgent()  # For web research
     
     def analyze(self, days: int = 3):
         """Analyze games using tier-based strategy."""
@@ -79,6 +81,10 @@ class BetBrain:
                     "match": f"{home} vs {away}",
                     "start_time": start_time,
                     "market": "ML (Home)",
+                    "win_pick": home,
+                    "goal_pred": round((home_stats.get("goals_for", 2.8) + away_stats.get("goals_against", 2.9)) / 2, 1),
+                    "analysis_notes": ml_analysis.get("reasoning", "")[:100],
+                    "market": "ML (Home)",
                     "odds": odds["home_ml"],
                     "model_prob": ml_analysis["home_prob"],
                     "implied_prob": 1/odds["home_ml"],
@@ -91,6 +97,9 @@ class BetBrain:
                 {
                     "match": f"{home} vs {away}",
                     "start_time": start_time,
+                    "win_pick": away,
+                    "goal_pred": round((home_stats.get("goals_for", 2.8) + away_stats.get("goals_against", 2.9)) / 2, 1),
+                    "analysis_notes": ml_analysis.get("reasoning", "")[:100],
                     "market": "ML (Away)",
                     "odds": odds["away_ml"],
                     "model_prob": ml_analysis["away_prob"],
@@ -104,6 +113,9 @@ class BetBrain:
                 {
                     "match": f"{home} vs {away}",
                     "start_time": start_time,
+                    "win_pick": "UNDER" if ou_analysis.get("under_prob", 0.5) > 0.5 else "OVER",
+                    "goal_pred": round(ou_analysis.get("predicted_total", 5.5), 1),
+                    "analysis_notes": f"Proj: {ou_analysis.get('predicted_total', 'N/A')} goals",
                     "market": f"Over {ou_analysis['line']}",
                     "odds": odds["over"],
                     "model_prob": ou_analysis["over_prob"],
@@ -129,9 +141,8 @@ class BetBrain:
         }
     
     def _get_injuries(self) -> dict:
-        """Get injury data (mock for now)."""
-        # In production, this would fetch from web
-        return {}
+        """Get injury data using research agent."""
+        return self.researcher.get_team_news("NHL")
 
 
 def main():

@@ -265,14 +265,15 @@
             <table>
                 <thead>
                     <tr>
-                        <th>Date</th>
+                        <th>Time</th>
                         <th>Match</th>
+                        <th>Pick</th>
                         <th>Market</th>
                         <th>Odds</th>
-                        <th>Model %</th>
+                        <th>Win %</th>
                         <th>Edge</th>
-                        <th>EV</th>
-                        <th>Confidence</th>
+                        <th>Goals</th>
+                        <th>Conf</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -280,12 +281,13 @@
                     <tr>
                         <td style="color: var(--text2); font-size: 0.85rem;">{{ bet.start_time|default('TBD') }}</td>
                         <td>{{ bet.match }}</td>
+                        <td style="color: var(--primary); font-weight: 600;">{{ bet.win_pick|default('-') }}</td>
                         <td>{{ bet.market }}</td>
                         <td>{{ bet.odds }}</td>
                         <td>{{ "%.1f"|format(bet.model_prob * 100) }}%</td>
                         <td class="{{ 'positive' if bet.edge > 0 else 'negative' }}">{{ "%.1f"|format(bet.edge * 100) }}%</td>
-                        <td class="{{ 'positive' if bet.ev > 0 else 'negative' }}">{{ "%.1f"|format(bet.ev * 100) }}%</td>
-                        <td>{{ bet.confidence }}</td>
+                        <td>{{ bet.goal_pred|default('-') }}</td>
+                        <td>{{ bet.confidence|default('medium') }}</td>
                     </tr>
                     {% endfor %}
                 </tbody>
