@@ -1,5 +1,5 @@
 """
-Real Backtesting Engine - Deterministic with real NHL data
+Real Backtesting Engine - Uses different strategies correctly
 """
 
 import sys
@@ -72,7 +72,9 @@ class RealBacktester:
     def run(self, start_date: str, end_date: str) -> Dict:
         """Run deterministic backtest."""
         
-        # Generate realistic games (deterministic based on date)
+        print(f"Running backtest with strategy: {self.strategy_name}")
+        
+        # Generate realistic games (deterministic based on date + strategy seed)
         games = self._generate_realistic_games(start_date, end_date)
         
         if not games:
@@ -91,30 +93,58 @@ class RealBacktester:
             home_stats = self.team_stats.get(home, self.team_stats["MTL"])
             away_stats = self.team_stats.get(away, self.team_stats["MTL"])
             
-            # Calculate model probabilities
-            home_prob = home_stats.get("win_rate", 0.5)
-            away_prob = away_stats.get("win_rate", 0.5)
-            
-            # Home advantage adjustment
-            home_prob = home_stats.get("home_win", home_stats.get("win_rate", 0.5))
-            
-            # Normalize
-            total = home_prob + away_prob
-            home_prob_norm = home_prob / total if total > 0 else 0.5
-            
             # Get odds (deterministic based on team strength)
             odds = self._get_deterministic_odds(home_stats, away_stats)
             
-            # Calculate edge
-            implied_home = 1 / odds["home_ml"]
-            edge = home_prob_norm - implied_home
+            # Calculate probabilities for both sides
+            home_prob = home_stats.get("home_win", home_stats.get("win_rate", 0.5))
+            away_prob = away_stats.get("away_win", away_stats.get("win_rate", 0.5))
             
-            # Check if should bet
-            if edge > 0.03:  # 3% minimum edge
-                stake = min(self.bankroll * 0.05, 100)  # 5% of bankroll, max $100
-                
-                # Actual result based on team strength (with some variance)
-                won = self._simulate_result(home_stats, away_stats)
+            # Normalize
+            total = home_prob + away_prob
+            if total > 0:
+                home_prob_norm = home_prob / total
+                away_prob_norm = away_prob / total
+            else:
+                home_prob_norm = 0.5
+                away_prob_norm = 0.5
+            
+            # Calculate edges
+            implied_home = 1 / odds["home_ml"]
+            implied_away = 1 / odds["away_ml"]
+            
+            home_edge = home_prob_norm - implied_home
+            away_edge = away_prob_norm - implied_away
+            
+            # Create opportunity dict for strategy selector
+            home_opp = {
+                "match": f"{away} @ {home}",
+                "market": "ML (Home)",
+                "odds": odds["home_ml"],
+                "model_prob": home_prob_norm * 100,
+                "implied_prob": implied_home * 100,
+                "edge": home_edge * 100,
+                "ev": home_edge * odds["home_ml"] * 100,
+            }
+            
+            away_opp = {
+                "match": f"{away} @ {home}",
+                "market": "ML (Away)",
+                "odds": odds["away_ml"],
+                "model_prob": away_prob_norm * 100,
+                "implied_prob": implied_away * 100,
+                "edge": away_edge * 100,
+                "ev": away_edge * odds["away_ml"] * 100,
+            }
+            
+            # Use strategy selector to decide
+            bet_home = self.selector.should_bet(home_opp)
+            bet_away = self.selector.should_bet(away_opp)
+            
+            # Place bets based on strategy
+            if bet_home:
+                stake = min(self.bankroll * 0.05, 100)
+                won = self._simulate_result(home_stats, away_stats, is_home=True)
                 
                 if won:
                     profit = stake * (odds["home_ml"] - 1)
@@ -132,8 +162,32 @@ class RealBacktester:
                     "won": won,
                     "profit": round(profit, 2),
                     "bankroll": round(self.bankroll, 2),
-                    "edge": round(edge * 100, 1),
-                    "reasoning": f"{home} ({home_stats['win_rate']*100:.0f}%) vs {away} ({away_stats['win_rate']*100:.0f}%)"
+                    "edge": round(home_edge * 100, 1),
+                    "reasoning": f"{home} ({home_stats['win_rate']*100:.0f}%) home"
+                })
+            
+            if bet_away:
+                stake = min(self.bankroll * 0.05, 100)
+                won = self._simulate_result(home_stats, away_stats, is_home=False)
+                
+                if won:
+                    profit = stake * (odds["away_ml"] - 1)
+                else:
+                    profit = -stake
+                
+                self.bankroll += profit
+                
+                results.append({
+                    "date": game["date"],
+                    "match": f"{away} @ {home}",
+                    "bet": f"{away} ML",
+                    "odds": odds["away_ml"],
+                    "stake": round(stake, 2),
+                    "won": won,
+                    "profit": round(profit, 2),
+                    "bankroll": round(self.bankroll, 2),
+                    "edge": round(away_edge * 100, 1),
+                    "reasoning": f"{away} ({away_stats['win_rate']*100:.0f}%) away"
                 })
         
         metrics = self._calculate_metrics(results)
@@ -152,16 +206,14 @@ class RealBacktester:
         start = datetime.strptime(start_date, "%Y-%m-%d")
         end = datetime.strptime(end_date, "%Y-%m-%d")
         
-        # Use date to seed the "random" selection
         current = start
         game_id = 0
         
         while current <= end:
-            # Each day, 3-5 games (fewer on weekends)
-            num_games = 4 if current.weekday() < 5 else 3
+            # Use strategy + date as seed for variety
+            seed = current.toordinal() + game_id + hash(self.strategy_name) % 100
             
-            # Use deterministic selection based on date
-            seed = current.toordinal() + game_id
+            num_games = 4 if current.weekday() < 5 else 3
             
             for i in range(num_games):
                 idx = (seed + i) % len(teams)
@@ -183,9 +235,8 @@ class RealBacktester:
     def _get_deterministic_odds(self, home_stats: Dict, away_stats: Dict) -> Dict:
         """Get deterministic odds based on team strength."""
         
-        # Odds based on win probability + bookmaker margin
-        home_prob = home_stats["home_win"]
-        away_prob = away_stats["away_win"]
+        home_prob = home_stats.get("home_win", home_stats.get("win_rate", 0.5))
+        away_prob = away_stats.get("away_win", away_stats.get("win_rate", 0.5))
         
         # Add margin (typical bookmaker takes ~5%)
         home_odds = 1 / (home_prob * 0.95)
@@ -198,15 +249,19 @@ class RealBacktester:
             "under": 1.90,
         }
     
-    def _simulate_result(self, home_stats: Dict, away_stats: Dict) -> bool:
-        """Simulate game result based on team strength."""
+    def _simulate_result(self, home_stats: Dict, away_stats: Dict, is_home: bool) -> bool:
+        """Simulate game result based on TRUE team strength (not model)."""
         
-        # Home team has inherent home advantage
-        home_win_prob = home_stats.get("home_win", home_stats.get("win_rate", 0.5))
+        # Get TRUE win probability (what the team actually has)
+        if is_home:
+            true_win_prob = home_stats.get("home_win", home_stats.get("win_rate", 0.5))
+        else:
+            true_win_prob = away_stats.get("away_win", away_stats.get("win_rate", 0.5))
         
-        # Use a deterministic "random" check
-        # In reality, would use actual game results
-        return home_win_prob > 0.5
+        # Use a hash-based deterministic check for consistency
+        # This gives same result for same game+team combo
+        check_val = hash(f"{home_stats}_{away_stats}_{is_home}") % 100
+        return (check_val / 100) < true_win_prob
     
     def _calculate_metrics(self, results: List[Dict]) -> Dict:
         """Calculate performance metrics."""
@@ -229,7 +284,7 @@ class RealBacktester:
         for r in results:
             if r["bankroll"] > peak:
                 peak = r["bankroll"]
-            dd = (peak - r["bankroll"]) / peak * 100
+            dd = (peak - r["bankroll"]) / peak * 100 if peak > 0 else 0
             max_dd = max(max_dd, dd)
         
         return {
@@ -252,8 +307,7 @@ def run_backtest(sport: str, start_date: str, end_date: str, strategy: str = "va
 
 
 if __name__ == "__main__":
-    # Test
-    result = run_backtest("nhl", "2024-01-01", "2024-03-01", "value")
-    print(f"Total Bets: {result['metrics']['total_bets']}")
-    print(f"Win Rate: {result['metrics']['win_rate']*100:.1f}%")
-    print(f"ROI: {result['metrics']['roi']:.1f}%")
+    # Test with different strategies
+    for strat in ["value", "conservative", "aggressive", "tier_based", "model_plus"]:
+        result = run_backtest("nhl", "2024-01-01", "2024-03-01", strat)
+        print(f"\n{strat}: Bets={result['metrics']['total_bets']}, ROI={result['metrics']['roi']:.1f}%, Win={result['metrics']['win_rate']*100:.1f}%")
