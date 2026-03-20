@@ -6,16 +6,13 @@
     <title>BetBrain - Backtest</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
-        :root {
-            --primary: #00d4aa; --success: #22c55e; --danger: #ef4444;
-            --bg: #0f0f23; --surface: #1a1a2e; --text: #e2e8f0; --text2: #94a3b8;
-        }
+        :root { --primary: #00d4aa; --success: #22c55e; --danger: #ef4444; --bg: #0f0f23; --surface: #1a1a2e; --text: #e2e8f0; --text2: #94a3b8; }
         body { font-family: 'Inter', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
         nav { background: var(--surface); padding: 1rem 2rem; display: flex; justify-content: space-between; border-bottom: 1px solid rgba(255,255,255,0.1); }
         nav a { color: var(--text2); text-decoration: none; margin-left: 2rem; }
         nav a:hover, nav a.active { color: var(--primary); }
         nav .logo { font-size: 1.5rem; font-weight: 700; color: var(--primary); }
-        .container { max-width: 800px; margin: 2rem auto; padding: 2rem; }
+        .container { max-width: 900px; margin: 2rem auto; padding: 2rem; }
         h1 { margin-bottom: 0.5rem; }
         .subtitle { color: var(--text2); margin-bottom: 2rem; }
         .stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; margin-bottom: 2rem; }
@@ -24,9 +21,12 @@
         .stat-value.success { color: var(--success); }
         .stat-value.danger { color: var(--danger); }
         .stat-label { color: var(--text2); font-size: 0.875rem; margin-top: 0.5rem; }
-        .params { background: var(--surface); padding: 1.5rem; border-radius: 12px; margin-bottom: 2rem; }
-        .params h3 { margin-bottom: 1rem; color: var(--primary); }
-        .param { display: flex; justify-content: space-between; padding: 0.5rem 0; border-bottom: 1px solid rgba(255,255,255,0.05); }
+        table { width: 100%; border-collapse: collapse; background: var(--surface); border-radius: 12px; overflow: hidden; }
+        th, td { padding: 0.75rem; text-align: left; }
+        th { background: #16213e; color: var(--text2); font-size: 0.75rem; text-transform: uppercase; }
+        tr { border-bottom: 1px solid rgba(255,255,255,0.05); }
+        .positive { color: var(--success); }
+        .negative { color: var(--danger); }
     </style>
 </head>
 <body>
@@ -42,39 +42,50 @@
         <h1>📈 Backtest Results</h1>
         <p class="subtitle">{{ sport|upper }} | {{ strategy }} | {{ start }} to {{ end }}</p>
         
-        <div class="params">
-            <h3>Parameters</h3>
-            <div class="param"><span>Sport</span><span>{{ sport|upper }}</span></div>
-            <div class="param"><span>Strategy</span><span>{{ strategy }}</span></div>
-            <div class="param"><span>Period</span><span>{{ start }} to {{ end }}</span></div>
-        </div>
-        
         <div class="stats-grid">
             <div class="stat-card">
-                <div class="stat-value {{ 'success' if results.total_return > 0 else 'danger' }}">
-                    {{ "%.1f"|format(results.total_return * 100) }}%
+                <div class="stat-value {{ 'success' if results.metrics.roi > 0 else 'danger' }}">
+                    {{ "%.1f"|format(results.metrics.roi) }}%
                 </div>
-                <div class="stat-label">Total Return</div>
+                <div class="stat-label">ROI</div>
             </div>
             <div class="stat-card">
-                <div class="stat-value">{{ results.total_bets }}</div>
+                <div class="stat-value">{{ results.metrics.total_bets }}</div>
                 <div class="stat-label">Total Bets</div>
             </div>
             <div class="stat-card">
-                <div class="stat-value {{ 'success' if results.win_rate > 0.5 else 'danger' }}">
-                    {{ "%.1f"|format(results.win_rate * 100) }}%
+                <div class="stat-value {{ 'success' if results.metrics.win_rate > 0.5 else '' }}">
+                    {{ "%.1f"|format(results.metrics.win_rate * 100) }}%
                 </div>
                 <div class="stat-label">Win Rate</div>
             </div>
             <div class="stat-card">
-                <div class="stat-value">${{ "%.0f"|format(results.final_bankroll) }}</div>
+                <div class="stat-value">${{ "%.0f"|format(results.metrics.final_bankroll) }}</div>
                 <div class="stat-label">Final Bankroll</div>
             </div>
         </div>
         
-        <p style="color: var(--text2); text-align: center;">
-            Connect real historical data and odds for actual backtest results.
-        </p>
+        <h2 style="margin-bottom:1rem;">Recent Bets</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>Date</th><th>Match</th><th>Bet</th><th>Odds</th><th>Stake</th><th>Result</th><th>Profit</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for bet in results.results[-20:] %}
+                <tr>
+                    <td>{{ bet.date }}</td>
+                    <td>{{ bet.match }}</td>
+                    <td>{{ bet.bet }}</td>
+                    <td>{{ bet.odds }}</td>
+                    <td>${{ bet.stake }}</td>
+                    <td class="{{ 'positive' if bet.won else 'negative' }}">{{ 'WIN' if bet.won else 'LOSS' }}</td>
+                    <td class="{{ 'positive' if bet.profit > 0 else 'negative' }}">${{ "%.2f"|format(bet.profit) }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
     </div>
 </body>
 </html>
