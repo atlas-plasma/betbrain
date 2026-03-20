@@ -94,6 +94,57 @@ class LogisticModel:
         # Would load trained model in production
         self.weights = {}
     
+    def predict(self, home_team: str, away_team: str, home_stats: Dict, away_stats: Dict) -> Prediction:
+        """Predict from team stats."""
+        
+        # Calculate team strength
+        home_strength = (
+            home_stats.get("win_rate", 0.5) * 0.4 +
+            home_stats.get("home_win_rate", 0.5) * 0.2 +
+            home_stats.get("form", 0.5) * 0.2 +
+            home_stats.get("rest", 2) / 5 * 0.1 +
+            (1 - home_stats.get("injuries", 0) / 5) * 0.1
+        )
+        
+        away_strength = (
+            away_stats.get("win_rate", 0.5) * 0.4 +
+            away_stats.get("away_win_rate", 0.5) * 0.2 +
+            away_stats.get("form", 0.5) * 0.2 +
+            away_stats.get("rest", 2) / 5 * 0.1 +
+            (1 - away_stats.get("injuries", 0) / 5) * 0.1
+        )
+        
+        # Convert to probability
+        diff = home_strength - away_strength
+        home_win = 1 / (1 + np.exp(-4 * diff))
+        
+        # Expected goals
+        home_goals = home_stats.get("goals_for_avg", 2.5)
+        away_goals = away_stats.get("goals_for_avg", 2.5)
+        
+        # Over/Under
+        expected_total = (home_goals + away_goals) / 2
+        over_prob = 1 / (1 + np.exp(-2 * (expected_total - 3.5)))
+        
+        # Confidence
+        if abs(home_win - 0.5) > 0.25:
+            confidence = "high"
+        elif abs(home_win - 0.5) > 0.15:
+            confidence = "medium"
+        else:
+            confidence = "low"
+        
+        return Prediction(
+            home_win_prob=home_win,
+            draw_prob=0.0,
+            away_win_prob=1 - home_win,
+            over_prob=over_prob,
+            under_prob=1 - over_prob,
+            expected_home_goals=home_goals,
+            expected_away_goals=away_goals,
+            confidence=confidence
+        )
+    
     def predict_from_features(self, features: pd.DataFrame) -> List[Prediction]:
         """Predict from feature dataframe."""
         predictions = []
