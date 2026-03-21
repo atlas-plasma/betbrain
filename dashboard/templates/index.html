@@ -8,231 +8,104 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
         :root {
-            --brand: #CF4E2E;
-            --brand-light: #F5E6E2;
-            --brand-mid: #E8917D;
-            --bg: #F9F7F4;
-            --surface: #FFFFFF;
-            --surface2: #F3F1EE;
-            --border: #E5E2DC;
-            --text: #1A1816;
-            --text2: #6B6560;
-            --text3: #A09A94;
-            --success: #2D7A4F;
-            --success-bg: #E8F5EE;
-            --danger: #C0392B;
-            --danger-bg: #FDE8E8;
-            --warning: #A0622A;
-            --warning-bg: #FEF3E8;
-            --shadow-sm: 0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04);
-            --shadow: 0 4px 12px rgba(0,0,0,0.07), 0 2px 4px rgba(0,0,0,0.04);
+            --brand: #CF4E2E; --brand-light: #F5E6E2; --brand-mid: #E8917D;
+            --bg: #F9F7F4; --surface: #FFFFFF; --surface2: #F3F1EE;
+            --border: #E5E2DC; --text: #1A1816; --text2: #6B6560; --text3: #A09A94;
+            --success: #2D7A4F; --success-bg: #E8F5EE;
+            --danger: #C0392B; --danger-bg: #FDE8E8;
+            --warning: #A0622A; --warning-bg: #FEF3E8;
+            --lucky: #6B3FA0; --lucky-bg: #F0E8FA;
+            --shadow-sm: 0 1px 3px rgba(0,0,0,0.06); --shadow: 0 4px 12px rgba(0,0,0,0.07);
             --radius: 10px;
         }
-
         body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg); color: var(--text); line-height: 1.5; min-height: 100vh; }
 
-        /* NAV */
-        nav {
-            background: var(--surface);
-            border-bottom: 1px solid var(--border);
-            padding: 0 2rem;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            height: 56px;
-            position: sticky;
-            top: 0;
-            z-index: 100;
-            box-shadow: var(--shadow-sm);
-        }
+        nav { background: var(--surface); border-bottom: 1px solid var(--border); padding: 0 2rem; display: flex; justify-content: space-between; align-items: center; height: 56px; position: sticky; top: 0; z-index: 100; box-shadow: var(--shadow-sm); }
         .logo { font-size: 1.1rem; font-weight: 700; color: var(--brand); letter-spacing: -0.02em; display: flex; align-items: center; gap: 0.5rem; }
         .nav-links { display: flex; gap: 0.25rem; }
-        .nav-links a {
-            padding: 0.4rem 0.85rem;
-            border-radius: 6px;
-            color: var(--text2);
-            text-decoration: none;
-            font-size: 0.875rem;
-            font-weight: 500;
-            transition: all 0.15s;
-        }
+        .nav-links a { padding: 0.4rem 0.85rem; border-radius: 6px; color: var(--text2); text-decoration: none; font-size: 0.875rem; font-weight: 500; transition: all 0.15s; }
         .nav-links a:hover { background: var(--surface2); color: var(--text); }
         .nav-links a.active { background: var(--brand-light); color: var(--brand); }
 
-        /* LAYOUT */
-        .container { max-width: 1440px; margin: 0 auto; padding: 1.75rem 2rem; }
-        .page-title { font-size: 1.4rem; font-weight: 700; color: var(--text); margin-bottom: 1.25rem; letter-spacing: -0.02em; }
+        .container { max-width: 1600px; margin: 0 auto; padding: 1.75rem 2rem; }
+        .page-title { font-size: 1.4rem; font-weight: 700; margin-bottom: 1.25rem; letter-spacing: -0.02em; }
 
-        /* TOOLBAR */
-        .toolbar {
-            background: var(--surface);
-            border: 1px solid var(--border);
-            border-radius: var(--radius);
-            padding: 0.875rem 1.25rem;
-            display: flex;
-            gap: 0.75rem;
-            align-items: center;
-            flex-wrap: wrap;
-            margin-bottom: 1.25rem;
-            box-shadow: var(--shadow-sm);
-        }
+        .toolbar { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 0.875rem 1.25rem; display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap; margin-bottom: 1.25rem; box-shadow: var(--shadow-sm); }
         .toolbar label { font-size: 0.8rem; font-weight: 600; color: var(--text2); text-transform: uppercase; letter-spacing: 0.04em; }
-        .toolbar select {
-            padding: 0.4rem 0.75rem;
-            background: var(--bg);
-            border: 1px solid var(--border);
-            color: var(--text);
-            border-radius: 6px;
-            font-size: 0.875rem;
-            font-family: inherit;
-            cursor: pointer;
-        }
-        .toolbar select:focus { outline: 2px solid var(--brand); outline-offset: 1px; }
-        .sport-tabs { display: flex; gap: 0.25rem; }
-        .sport-tab {
-            padding: 0.35rem 0.85rem;
-            border-radius: 6px;
-            border: 1px solid var(--border);
-            background: var(--bg);
-            color: var(--text2);
-            text-decoration: none;
-            font-size: 0.8rem;
-            font-weight: 500;
-        }
+        .toolbar select { padding: 0.4rem 0.75rem; background: var(--bg); border: 1px solid var(--border); color: var(--text); border-radius: 6px; font-size: 0.875rem; font-family: inherit; cursor: pointer; }
+        .sport-tab { padding: 0.35rem 0.85rem; border-radius: 6px; border: 1px solid var(--border); background: var(--bg); color: var(--text2); text-decoration: none; font-size: 0.8rem; font-weight: 500; }
         .sport-tab.active { background: var(--brand); color: white; border-color: var(--brand); }
         .divider { width: 1px; height: 22px; background: var(--border); }
         .gen-time { font-size: 0.78rem; color: var(--text3); margin-left: auto; }
 
-        /* SUMMARY PILLS */
         .pills { display: flex; gap: 0.75rem; margin-bottom: 1.25rem; flex-wrap: wrap; }
-        .pill {
-            background: var(--surface);
-            border: 1px solid var(--border);
-            padding: 0.6rem 1.1rem;
-            border-radius: 24px;
-            font-size: 0.82rem;
-            color: var(--text2);
-            display: flex;
-            align-items: center;
-            gap: 0.4rem;
-            box-shadow: var(--shadow-sm);
-        }
+        .pill { background: var(--surface); border: 1px solid var(--border); padding: 0.55rem 1rem; border-radius: 24px; font-size: 0.82rem; color: var(--text2); display: flex; align-items: center; gap: 0.4rem; box-shadow: var(--shadow-sm); }
         .pill strong { color: var(--text); font-weight: 700; }
         .pill.highlight { border-color: var(--brand-mid); background: var(--brand-light); color: var(--brand); }
         .pill.highlight strong { color: var(--brand); }
 
-        /* COLUMN LEGEND */
-        .legend {
-            background: var(--surface);
-            border: 1px solid var(--border);
-            border-left: 3px solid var(--brand);
-            border-radius: var(--radius);
-            padding: 0.75rem 1rem;
-            margin-bottom: 1rem;
-            display: flex;
-            gap: 1.5rem;
-            flex-wrap: wrap;
-            font-size: 0.78rem;
-            color: var(--text2);
-            box-shadow: var(--shadow-sm);
-        }
+        .legend { background: var(--surface); border: 1px solid var(--border); border-left: 3px solid var(--brand); border-radius: var(--radius); padding: 0.75rem 1rem; margin-bottom: 1rem; display: flex; gap: 1.5rem; flex-wrap: wrap; font-size: 0.77rem; color: var(--text2); box-shadow: var(--shadow-sm); }
         .legend strong { color: var(--brand); font-weight: 600; }
 
-        /* TABLE */
         .table-wrap { overflow-x: auto; border-radius: var(--radius); box-shadow: var(--shadow); border: 1px solid var(--border); }
-        table { width: 100%; border-collapse: collapse; background: var(--surface); font-size: 0.85rem; }
+        table { width: 100%; border-collapse: collapse; background: var(--surface); font-size: 0.83rem; }
         thead tr { background: var(--surface2); border-bottom: 2px solid var(--border); }
-        th {
-            padding: 0.65rem 0.9rem;
-            text-align: left;
-            color: var(--text2);
-            font-size: 0.72rem;
-            font-weight: 600;
-            text-transform: uppercase;
-            letter-spacing: 0.06em;
-            white-space: nowrap;
-        }
-        td { padding: 0.65rem 0.9rem; border-bottom: 1px solid var(--border); vertical-align: middle; }
+        th { padding: 0.6rem 0.75rem; text-align: left; color: var(--text2); font-size: 0.7rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; white-space: nowrap; }
+        td { padding: 0.6rem 0.75rem; border-bottom: 1px solid var(--border); vertical-align: middle; }
         tr:last-child td { border-bottom: none; }
         tr.bet-row { background: #F0FAF5; }
         tr.bet-row:hover { background: #E4F5EC; }
         tr:not(.bet-row):hover { background: var(--surface2); }
 
-        /* AGENT VOTER PANEL (expandable) */
-        .agents-panel {
-            display: none;
-            padding: 0.75rem 0.9rem;
-            background: var(--bg);
-            border-top: 1px solid var(--border);
-            font-size: 0.78rem;
-            gap: 0.5rem;
-        }
-        tr.expanded + tr .agents-panel { display: flex; flex-wrap: wrap; }
-        .agent-card {
-            background: var(--surface);
-            border: 1px solid var(--border);
-            border-radius: 6px;
-            padding: 0.5rem 0.75rem;
-            min-width: 180px;
-            flex: 1;
-        }
-        .agent-card-name { font-weight: 700; color: var(--brand); font-size: 0.75rem; margin-bottom: 0.25rem; }
-        .agent-card-vote { color: var(--text); margin-bottom: 0.2rem; }
-        .agent-card-reasoning { color: var(--text2); font-size: 0.72rem; line-height: 1.4; }
-
-        /* BADGES */
-        .badge {
-            display: inline-flex;
-            align-items: center;
-            padding: 0.18rem 0.55rem;
-            border-radius: 20px;
-            font-size: 0.68rem;
-            font-weight: 700;
-            white-space: nowrap;
-            letter-spacing: 0.02em;
-        }
-        .badge-bet { background: var(--success-bg); color: var(--success); }
+        .badge { display: inline-flex; align-items: center; padding: 0.18rem 0.5rem; border-radius: 20px; font-size: 0.67rem; font-weight: 700; white-space: nowrap; letter-spacing: 0.02em; }
+        .badge-bet  { background: var(--success-bg); color: var(--success); }
         .badge-skip { background: var(--surface2); color: var(--text3); border: 1px solid var(--border); }
         .badge-high { background: var(--brand-light); color: var(--brand); }
         .badge-medium { background: var(--warning-bg); color: var(--warning); }
-        .badge-low { background: var(--surface2); color: var(--text3); }
+        .badge-low  { background: var(--surface2); color: var(--text3); }
+        .badge-b2b  { background: #FFF3CD; color: #856404; border: 1px solid #FFD600; }
+        .badge-lucky   { background: var(--lucky-bg); color: var(--lucky); }
+        .badge-unlucky { background: #E8F4FD; color: #1A6A9A; }
 
         .positive { color: var(--success); font-weight: 600; }
         .negative { color: var(--danger); }
         .muted { color: var(--text2); }
         .match-cell { font-weight: 600; white-space: nowrap; }
-        .market-cell { color: var(--brand); font-size: 0.8rem; white-space: nowrap; font-weight: 500; }
-        .pick-cell { font-weight: 700; color: var(--text); white-space: nowrap; }
+        .market-cell { color: var(--brand); font-size: 0.78rem; font-weight: 500; white-space: nowrap; }
+        .pick-cell { font-weight: 700; white-space: nowrap; }
         .odds-cell { font-weight: 700; font-variant-numeric: tabular-nums; }
-        .score-cell { font-family: 'SF Mono', 'Fira Code', monospace; color: var(--text2); white-space: nowrap; font-size: 0.8rem; }
-        .reason-cell { color: var(--text2); font-size: 0.78rem; max-width: 260px; line-height: 1.45; }
-        .votes-cell { font-size: 0.75rem; color: var(--text2); white-space: nowrap; }
+        .score-cell { font-family: 'SF Mono', monospace; color: var(--text2); white-space: nowrap; font-size: 0.78rem; }
+        .kelly-cell { color: var(--brand); font-weight: 600; font-size: 0.8rem; }
+        .reason-cell { color: var(--text2); font-size: 0.75rem; max-width: 220px; line-height: 1.4; }
 
-        .expand-btn {
-            background: none;
-            border: 1px solid var(--border);
-            border-radius: 4px;
-            color: var(--text2);
-            cursor: pointer;
-            padding: 0.2rem 0.5rem;
-            font-size: 0.72rem;
-            font-family: inherit;
-            transition: all 0.15s;
-        }
+        /* Context row with signals */
+        .ctx-row td { background: var(--bg); border-bottom: 2px solid var(--border) !important; padding: 0.5rem 0.75rem; }
+        .signals { display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center; }
+        .signal-chip { display: inline-flex; align-items: center; gap: 0.25rem; padding: 0.2rem 0.55rem; border-radius: 12px; font-size: 0.7rem; font-weight: 600; border: 1px solid; }
+        .chip-pdo-lucky    { background: var(--lucky-bg); color: var(--lucky); border-color: #C9B3E8; }
+        .chip-pdo-unlucky  { background: #E8F4FD; color: #1A6A9A; border-color: #9DD3F5; }
+        .chip-b2b          { background: #FFF3CD; color: #7B5800; border-color: #FFD600; }
+        .chip-goalie-elite { background: var(--success-bg); color: var(--success); border-color: #9BDFB8; }
+        .chip-goalie-weak  { background: var(--danger-bg); color: var(--danger); border-color: #F5B4B4; }
+        .chip-streak-win   { background: #E8F5EE; color: #2D7A4F; border-color: #9BDFB8; }
+        .chip-streak-loss  { background: var(--danger-bg); color: var(--danger); border-color: #F5B4B4; }
+
+        /* Agent panel */
+        .agents-row td { background: #FAFAFA; border-bottom: 2px solid var(--border) !important; }
+        .agent-cards { display: flex; flex-wrap: wrap; gap: 0.5rem; padding: 0.75rem; }
+        .agent-card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 0.6rem 0.85rem; min-width: 200px; flex: 1; max-width: 340px; }
+        .agent-card-name { font-weight: 700; color: var(--brand); font-size: 0.73rem; margin-bottom: 0.3rem; text-transform: uppercase; letter-spacing: 0.04em; }
+        .agent-card-vote { font-size: 0.78rem; color: var(--text); margin-bottom: 0.25rem; }
+        .agent-card-reason { color: var(--text2); font-size: 0.72rem; line-height: 1.4; }
+
+        .expand-btn { background: none; border: 1px solid var(--border); border-radius: 4px; color: var(--text2); cursor: pointer; padding: 0.18rem 0.5rem; font-size: 0.7rem; font-family: inherit; transition: all 0.15s; }
         .expand-btn:hover { background: var(--brand-light); color: var(--brand); border-color: var(--brand); }
 
         footer { text-align: center; padding: 2rem; color: var(--text3); font-size: 0.78rem; border-top: 1px solid var(--border); margin-top: 2rem; }
-
-        @media (max-width: 768px) {
-            .container { padding: 1rem; }
-            nav { padding: 0 1rem; }
-        }
     </style>
 </head>
 <body>
-
 <nav>
     <div class="logo">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="#CF4E2E" stroke-width="2"/><path d="M8 12l3 3 5-5" stroke="#CF4E2E" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
@@ -250,9 +123,7 @@
 
     <div class="toolbar">
         <label>Sport</label>
-        <div class="sport-tabs">
-            <a href="/?sport=nhl&strategy={{ strategy }}" class="sport-tab {{ 'active' if sport == 'nhl' else '' }}">🏒 NHL</a>
-        </div>
+        <a href="/?sport=nhl&strategy={{ strategy }}" class="sport-tab {{ 'active' if sport == 'nhl' else '' }}">🏒 NHL</a>
         <div class="divider"></div>
         <label>Strategy</label>
         <select onchange="window.location.href='/?sport={{ sport }}&strategy='+this.value">
@@ -265,25 +136,26 @@
 
     {% set bets = opportunities | selectattr('should_bet') | list %}
     <div class="pills">
-        <div class="pill"><strong>{{ opportunities | length }}</strong> matchups analysed</div>
+        <div class="pill"><strong>{{ opportunities | length }}</strong> opportunities analysed</div>
         <div class="pill highlight"><strong>{{ bets | length }}</strong> value bets flagged</div>
         <div class="pill"><strong>{{ opportunities | selectattr('confidence', 'equalto', 'high') | list | length }}</strong> high confidence</div>
-        <div class="pill"><strong>{{ opportunities | selectattr('should_bet') | selectattr('market', 'equalto', 'Moneyline') | list | length }}</strong> ML bets</div>
+        <div class="pill"><strong>{{ opportunities | selectattr('home_b2b') | list | length + opportunities | selectattr('away_b2b') | list | length }}</strong> B2B alerts</div>
     </div>
 
     {% if opportunities %}
     <div class="legend">
-        <span><strong>Model %</strong> — agents' consensus win probability</span>
-        <span><strong>Market %</strong> — bookmaker's implied prob (vig removed)</span>
-        <span><strong>Edge</strong> — Model minus Market; &gt;+3% signals value</span>
-        <span><strong>EV</strong> — expected return per $1 staked</span>
-        <span><strong>Score Pred</strong> — projected goals Home − Away</span>
-        <span><strong>Over %</strong> — P(total goals exceed the line)</span>
-        <span><strong>Agents</strong> — click "votes" to see each agent's reasoning</span>
+        <span><strong>Model %</strong> — agent-weighted consensus probability</span>
+        <span><strong>Market %</strong> — book implied (vig removed)</span>
+        <span><strong>Edge</strong> — Model minus Market; &gt;3% = value</span>
+        <span><strong>EV</strong> — expected return per $1</span>
+        <span><strong>Kelly %</strong> — fractional Kelly stake recommendation</span>
+        <span><strong>PDO</strong> — shooting% + save% (>102 = lucky→regress)</span>
+        <span><strong>B2B</strong> — team played yesterday (significant fatigue penalty)</span>
+        <span><strong>Pyth%</strong> — Pythagorean win expectation (GF²/GF²+GA²)</span>
     </div>
 
     <div class="table-wrap">
-        <table id="main-table">
+        <table>
             <thead>
                 <tr>
                     <th>Time</th>
@@ -295,66 +167,81 @@
                     <th>Market %</th>
                     <th>Edge</th>
                     <th>EV</th>
+                    <th>Kelly %</th>
                     <th>Score Pred</th>
-                    <th>Total / Line</th>
+                    <th>Total/Line</th>
                     <th>Over %</th>
                     <th>Conf</th>
                     <th>Action</th>
-                    <th>Agents</th>
-                    <th>Reasoning</th>
+                    <th>Details</th>
                 </tr>
             </thead>
             <tbody>
                 {% for o in opportunities %}
+                {# Only show context row once per game (on first row of a game) #}
+                {% set game_key = o.home_team ~ o.away_team ~ o.date %}
+                {% if loop.first or (opportunities[loop.index0-1].home_team ~ opportunities[loop.index0-1].away_team ~ opportunities[loop.index0-1].date) != game_key %}
+                <tr class="ctx-row" id="ctx-{{ loop.index }}">
+                    <td colspan="16">
+                        <div class="signals">
+                            <span style="font-size:0.72rem; color:var(--text2); font-weight:600;">{{ o.away_team }} @ {{ o.home_team }}</span>
+                            {% if o.home_b2b %}<span class="signal-chip chip-b2b">⚡ {{ o.home_team }} B2B</span>{% endif %}
+                            {% if o.away_b2b %}<span class="signal-chip chip-b2b">⚡ {{ o.away_team }} B2B (road)</span>{% endif %}
+                            {% if o.home_pdo_label in ('lucky','very_lucky') %}<span class="signal-chip chip-pdo-lucky">{{ o.home_team }} PDO {{ o.home_pdo }} (lucky→regress)</span>{% endif %}
+                            {% if o.away_pdo_label in ('lucky','very_lucky') %}<span class="signal-chip chip-pdo-lucky">{{ o.away_team }} PDO {{ o.away_pdo }} (lucky→regress)</span>{% endif %}
+                            {% if o.home_pdo_label in ('unlucky','very_unlucky') %}<span class="signal-chip chip-pdo-unlucky">{{ o.home_team }} PDO {{ o.home_pdo }} (unlucky→improve)</span>{% endif %}
+                            {% if o.away_pdo_label in ('unlucky','very_unlucky') %}<span class="signal-chip chip-pdo-unlucky">{{ o.away_team }} PDO {{ o.away_pdo }} (unlucky→improve)</span>{% endif %}
+                            {% if o.home_goalie_sv and o.home_goalie_sv >= 91.8 %}<span class="signal-chip chip-goalie-elite">🥅 {{ o.home_goalie }} {{ o.home_goalie_sv }}%</span>{% endif %}
+                            {% if o.away_goalie_sv and o.away_goalie_sv >= 91.8 %}<span class="signal-chip chip-goalie-elite">🥅 {{ o.away_goalie }} {{ o.away_goalie_sv }}%</span>{% endif %}
+                            {% if o.home_goalie_sv and o.home_goalie_sv < 90.0 %}<span class="signal-chip chip-goalie-weak">⚠ {{ o.home_goalie }} {{ o.home_goalie_sv }}%</span>{% endif %}
+                            {% if o.away_goalie_sv and o.away_goalie_sv < 90.0 %}<span class="signal-chip chip-goalie-weak">⚠ {{ o.away_goalie }} {{ o.away_goalie_sv }}%</span>{% endif %}
+                            <span class="muted" style="font-size:0.7rem; margin-left:auto;">
+                                Pyth: {{ o.home_team }} {{ o.home_pyth }}% · {{ o.away_team }} {{ o.away_pyth }}%
+                            </span>
+                        </div>
+                    </td>
+                </tr>
+                {% endif %}
+
                 <tr class="{{ 'bet-row' if o.should_bet else '' }}" id="row-{{ loop.index }}">
-                    <td class="muted" style="font-size:0.78rem;">{{ o.start_time | default('TBD') }}</td>
+                    <td class="muted" style="font-size:0.76rem;">{{ o.start_time | default('TBD') }}</td>
                     <td class="match-cell">{{ o.match }}</td>
                     <td class="market-cell">{{ o.market }}</td>
                     <td class="pick-cell">{{ o.win_pick | default('—') }}</td>
                     <td class="odds-cell">{{ "%.2f"|format(o.odds) }}</td>
                     <td class="{{ 'positive' if o.model_prob > 0.5 else 'muted' }}">{{ "%.1f"|format(o.model_prob * 100) }}%</td>
                     <td class="muted">{{ "%.1f"|format(o.implied_prob * 100) }}%</td>
-                    <td class="{{ 'positive' if o.edge > 0.03 else ('negative' if o.edge < 0 else 'muted') }}">
-                        {{ "%+.1f"|format(o.edge * 100) }}%
-                    </td>
-                    <td class="{{ 'positive' if o.ev > 0 else 'negative' }}">
-                        {{ "%+.1f"|format(o.ev * 100) }}%
+                    <td class="{{ 'positive' if o.edge > 0.03 else ('negative' if o.edge < 0 else 'muted') }}">{{ "%+.1f"|format(o.edge * 100) }}%</td>
+                    <td class="{{ 'positive' if o.ev > 0 else 'negative' }}">{{ "%+.1f"|format(o.ev * 100) }}%</td>
+                    <td class="kelly-cell">
+                        {% if o.kelly and o.kelly > 0 %}
+                        {{ "%.1f"|format(o.kelly * 100) }}%
+                        {% else %}—{% endif %}
                     </td>
                     <td class="score-cell">{{ o.score_pred | default('—') }}</td>
                     <td class="score-cell">{{ o.pred_total | default('—') }} / {{ o.ou_line | default('6.5') }}</td>
                     <td class="muted">{{ o.over_prob | default('—') }}%</td>
+                    <td><span class="badge badge-{{ o.confidence | default('medium') }}">{{ (o.confidence | default('medium')) | upper }}</span></td>
+                    <td><span class="badge {{ 'badge-bet' if o.should_bet else 'badge-skip' }}">{{ 'BET' if o.should_bet else 'SKIP' }}</span></td>
                     <td>
-                        <span class="badge badge-{{ o.confidence | default('medium') }}">
-                            {{ (o.confidence | default('medium')) | upper }}
-                        </span>
-                    </td>
-                    <td>
-                        <span class="badge {{ 'badge-bet' if o.should_bet else 'badge-skip' }}">
-                            {{ 'BET' if o.should_bet else 'SKIP' }}
-                        </span>
-                    </td>
-                    <td class="votes-cell">
-                        {% if o.ml_vote_tally %}
-                        <button class="expand-btn" onclick="toggleAgents({{ loop.index }})">votes ▾</button>
-                        <div style="margin-top:3px; font-size:0.7rem; color:var(--text3);">
-                            {{ o.vote_summary | default('') | replace('ML votes [', '') | replace(']', '') | truncate(30) }}
-                        </div>
+                        {% if o.agent_votes %}
+                        <button class="expand-btn" onclick="toggleAgents({{ loop.index }})">agents ▾</button>
                         {% endif %}
                     </td>
-                    <td class="reason-cell">{{ (o.reasoning | default('—'))[:140] }}{% if (o.reasoning | default('')) | length > 140 %}…{% endif %}</td>
                 </tr>
+
                 {% if o.agent_votes %}
-                <tr id="agents-{{ loop.index }}" style="display:none;">
-                    <td colspan="16" style="padding:0; background:var(--bg); border-bottom:2px solid var(--border);">
-                        <div style="display:flex; flex-wrap:wrap; gap:0.5rem; padding:0.75rem 1rem;">
+                <tr class="agents-row" id="agents-{{ loop.index }}" style="display:none;">
+                    <td colspan="16">
+                        <div class="agent-cards">
                             {% for av in o.agent_votes %}
                             <div class="agent-card">
                                 <div class="agent-card-name">{{ av.agent }}</div>
                                 <div class="agent-card-vote">
-                                    ML: <strong>{{ av.ml | upper }}</strong> ({{ av.ml_conf }}%)
-                                    &nbsp;|&nbsp; O/U: <strong>{{ av.ou | upper }}</strong> ({{ av.ou_conf }}%)
+                                    ML: <strong>{{ av.ml | upper }}</strong> {{ av.ml_conf }}%
+                                    &nbsp;·&nbsp; O/U: <strong>{{ av.ou | upper }}</strong> {{ av.ou_conf }}%
                                 </div>
-                                <div class="agent-card-reasoning">{{ av.reasoning[:200] }}{% if av.reasoning | length > 200 %}…{% endif %}</div>
+                                <div class="agent-card-reason">{{ av.reasoning[:220] }}{% if av.reasoning | length > 220 %}…{% endif %}</div>
                             </div>
                             {% endfor %}
                         </div>
@@ -380,13 +267,11 @@
 function toggleAgents(idx) {
     const row = document.getElementById('agents-' + idx);
     if (!row) return;
-    const visible = row.style.display !== 'none';
-    row.style.display = visible ? 'none' : 'table-row';
-    // Update button
+    const vis = row.style.display !== 'none';
+    row.style.display = vis ? 'none' : 'table-row';
     const btn = document.querySelector('#row-' + idx + ' .expand-btn');
-    if (btn) btn.textContent = visible ? 'votes ▾' : 'votes ▴';
+    if (btn) btn.textContent = vis ? 'agents ▾' : 'agents ▴';
 }
 </script>
-
 </body>
 </html>

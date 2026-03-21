@@ -136,29 +136,74 @@ class NHLDataFetcher:
                     abbrev = abbrev_raw.get("default", "") if isinstance(abbrev_raw, dict) else str(abbrev_raw)
                     if not abbrev:
                         continue
-                    gp = max(1, t.get("gamesPlayed", 1))
-                    wins = t.get("wins", 0)
-                    gf = t.get("goalFor", 0)
-                    ga = t.get("goalAgainst", 0)
-                    wl10 = t.get("l10Wins", wins)  # last 10 wins
+                    gp      = max(1, t.get("gamesPlayed", 1))
+                    wins    = t.get("wins", 0)
+                    losses  = t.get("losses", 0)
+                    ot      = t.get("otLosses", 0)
+                    gf      = t.get("goalFor", 0)
+                    ga      = t.get("goalAgainst", 0)
+                    reg_w   = t.get("regulationWins", wins)
+                    so_w    = t.get("shootoutWins", 0)
+
+                    # Home splits
+                    h_gp   = max(1, t.get("homeGamesPlayed", gp // 2))
+                    h_wins = t.get("homeWins", 0)
+                    h_gf   = t.get("homeGoalsFor", 0)
+                    h_ga   = t.get("homeGoalsAgainst", 0)
+
+                    # Road splits
+                    r_gp   = max(1, t.get("roadGamesPlayed", gp // 2))
+                    r_wins = t.get("roadWins", 0)
+                    r_gf   = t.get("roadGoalsFor", 0)
+                    r_ga   = t.get("roadGoalsAgainst", 0)
+
+                    # Last 10
+                    l10_gp   = max(1, t.get("l10GamesPlayed", 10))
+                    l10_wins = t.get("l10Wins", 0)
+                    l10_gf   = t.get("l10GoalsFor", 0)
+                    l10_ga   = t.get("l10GoalsAgainst", 0)
+
+                    # Streak
+                    streak_code  = t.get("streakCode", "")
+                    streak_count = t.get("streakCount", 0)
+
                     cache[abbrev] = {
                         "team": abbrev,
                         "games_played": gp,
                         "wins": wins,
-                        "losses": t.get("losses", 0),
-                        "ot": t.get("otLosses", 0),
+                        "losses": losses,
+                        "ot": ot,
                         "goals_for": gf,
                         "goals_against": ga,
-                        "win_rate": wins / gp,
-                        "home_win_rate": min(0.90, wins / gp + 0.05),
-                        "away_win_rate": max(0.05, wins / gp - 0.05),
-                        "goals_for_avg": gf / gp,
-                        "goals_against_avg": ga / gp,
-                        "form": wl10 / 10 if wl10 else wins / gp,
-                        # Placeholder special teams — filled in below if available
-                        "powerplay_pct": 20,
-                        "penalty_kill_pct": 80,
-                        "save_pct": 0.910,
+                        # Per-game averages
+                        "win_rate":           wins / gp,
+                        "goals_for_avg":      gf / gp,
+                        "goals_against_avg":  ga / gp,
+                        # True home/road splits
+                        "home_win_rate":      h_wins / h_gp,
+                        "home_gf_avg":        h_gf / h_gp,
+                        "home_ga_avg":        h_ga / h_gp,
+                        "away_win_rate":      r_wins / r_gp,
+                        "away_gf_avg":        r_gf / r_gp,
+                        "away_ga_avg":        r_ga / r_gp,
+                        # Last 10 games
+                        "l10_gp":             l10_gp,
+                        "l10_wins":           l10_wins,
+                        "l10_win_rate":       l10_wins / l10_gp,
+                        "l10_gf_avg":         l10_gf / l10_gp,
+                        "l10_ga_avg":         l10_ga / l10_gp,
+                        # Quality metrics
+                        "reg_win_rate":       reg_w / gp,
+                        "shootout_wins":      so_w,
+                        # Blended form (used by agents directly)
+                        "form": l10_wins / l10_gp,
+                        # Streak
+                        "streak_code":        streak_code,
+                        "streak_count":       streak_count,
+                        # Placeholder special teams
+                        "powerplay_pct":      20,
+                        "penalty_kill_pct":   80,
+                        "save_pct":           0.910,
                     }
                 self._standings_cache = cache
                 return cache
