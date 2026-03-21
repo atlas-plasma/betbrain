@@ -122,12 +122,9 @@ class BetBrainPipeline:
                 ou_line = live.get("ou_line", 6.5)
                 over_odds  = live.get("over", 1.909)
                 under_odds = live.get("under", 1.909)
-                odds_source = "theoddsapi"
+                odds_source = live.get("book") or "theoddsapi"
             else:
-                fb = self.odds_api.get_fallback_odds(
-                    home_stats.get("win_rate", 0.5),
-                    away_stats.get("win_rate", 0.5),
-                )
+                fb = self.odds_api.get_fallback_odds(home_stats, away_stats)
                 home_ml = fb["home_ml"]
                 away_ml = fb["away_ml"]
                 stat_vote_preview = StatisticalAgent().analyze(
@@ -306,41 +303,80 @@ class BetBrainPipeline:
         opportunities.sort(key=lambda x: x.get("edge", 0), reverse=True)
         return opportunities
 
+    # Full team name → NHL abbreviation (TheOddsAPI uses full names)
+    _NAME_TO_ABBREV = {
+        "Anaheim Ducks": "ANA", "Arizona Coyotes": "ARI", "Boston Bruins": "BOS",
+        "Buffalo Sabres": "BUF", "Calgary Flames": "CGY", "Carolina Hurricanes": "CAR",
+        "Chicago Blackhawks": "CHI", "Colorado Avalanche": "COL", "Columbus Blue Jackets": "CBJ",
+        "Dallas Stars": "DAL", "Detroit Red Wings": "DET", "Edmonton Oilers": "EDM",
+        "Florida Panthers": "FLA", "Los Angeles Kings": "LAK", "Minnesota Wild": "MIN",
+        "Montreal Canadiens": "MTL", "Nashville Predators": "NSH", "New Jersey Devils": "NJD",
+        "New York Islanders": "NYI", "New York Rangers": "NYR", "Ottawa Senators": "OTT",
+        "Philadelphia Flyers": "PHI", "Pittsburgh Penguins": "PIT", "San Jose Sharks": "SJS",
+        "Seattle Kraken": "SEA", "St. Louis Blues": "STL", "Tampa Bay Lightning": "TBL",
+        "Toronto Maple Leafs": "TOR", "Utah Hockey Club": "UTA", "Vancouver Canucks": "VAN",
+        "Vegas Golden Knights": "VGK", "Washington Capitals": "WSH", "Winnipeg Jets": "WPG",
+    }
+
     def _fetch_live_odds_map(self) -> Dict:
+        """Fetch live odds and return a map keyed by (home_abbrev, away_abbrev).
+
+        Prefers Betway odds; falls back to any available bookmaker.
+        Converts TheOddsAPI full team names to NHL abbreviations so the
+        lookup matches the abbreviations used throughout the rest of the code.
+        """
         odds_map = {}
         if not self.odds_api.has_api():
+            print("  [odds] No ODDS_API_KEY — using synthetic fallback odds")
             return odds_map
         try:
-            games = self.odds_api.get_market_odds(
-                sport="icehockey_nhl", market="h2h,totals"
-            )
+            games = self.odds_api.get_market_odds()
+            preferred = self.odds_api.PREFERRED_BOOKS
+
             for game in games:
-                home = game.get("home_team", "")
-                away = game.get("away_team", "")
+                home_full = game.get("home_team", "")
+                away_full = game.get("away_team", "")
+                home = self._NAME_TO_ABBREV.get(home_full, home_full)
+                away = self._NAME_TO_ABBREV.get(away_full, away_full)
+
+                # Sort bookmakers: preferred books first
+                books = sorted(
+                    game.get("bookmakers", []),
+                    key=lambda b: preferred.index(b["key"])
+                    if b["key"] in preferred else len(preferred),
+                )
+
                 home_ml = away_ml = over = under = ou_line = None
-                for site in game.get("bookmakers", [])[:3]:
+                book_used = None
+                for site in books:
                     for mkt in site.get("markets", []):
                         k = mkt.get("key")
                         outs = {o["name"]: o["price"] for o in mkt.get("outcomes", [])}
-                        if k == "h2h":
-                            home_ml = home_ml or outs.get(home)
-                            away_ml = away_ml or outs.get(away)
-                        elif k == "totals":
-                            over  = over  or outs.get("Over")
-                            under = under or outs.get("Under")
+                        if k == "h2h" and not home_ml:
+                            home_ml = outs.get(home_full)
+                            away_ml = outs.get(away_full)
+                            book_used = site.get("title", site.get("key"))
+                        elif k == "totals" and not over:
+                            over  = outs.get("Over")
+                            under = outs.get("Under")
                             for o in mkt.get("outcomes", []):
                                 if o.get("name") == "Over" and not ou_line:
                                     ou_line = o.get("point")
+                    if home_ml and over:
+                        break  # got everything from this book
+
                 if home_ml and away_ml:
                     odds_map[(home, away)] = {
-                        "home_ml": home_ml,
-                        "away_ml": away_ml,
-                        "over":    over    or 1.909,
-                        "under":   under   or 1.909,
-                        "ou_line": ou_line or 6.5,
+                        "home_ml":   home_ml,
+                        "away_ml":   away_ml,
+                        "over":      over   or 1.909,
+                        "under":     under  or 1.909,
+                        "ou_line":   ou_line or 6.5,
+                        "book":      book_used,
                     }
+                    print(f"    {away} @ {home}: {home_ml}/{away_ml} ({book_used})")
         except Exception as e:
-            print(f"  [odds] {e}")
+            print(f"  [odds] fetch error: {e}")
         return odds_map
 
     def _vote_summary(self, consensus) -> str:

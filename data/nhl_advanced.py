@@ -150,6 +150,107 @@ class NHLAdvancedStats:
             "full_ga": round(full_ga, 3),
         }
 
+    def enrich_historical(self, team_abbr: str, game_date: str, standings: Dict) -> Dict:
+        """
+        Point-in-time enrichment for backtesting — NO look-ahead.
+
+        Uses only the standings data for the specific game_date (passed in as
+        a dict already fetched via /v1/standings/{date}).  Goalie save% and
+        team shooting% are estimated from goals data because the NHL API has
+        no point-in-time club-stats endpoint:
+
+          estimated_sv_pct  = 1 - (GA_avg / NHL_AVG_SHOTS_PER_GAME)
+          estimated_sh_pct  = GF_avg / NHL_AVG_SHOTS_PER_GAME
+
+        ~30 shots per game is the well-established NHL average; the estimates
+        are unbiased approximations with no future information.
+        """
+        NHL_AVG_SHOTS = 30.0   # NHL average shots on goal per team per game
+
+        base = standings.get(team_abbr, {})
+
+        full_gf = base.get("goals_for_avg",  LEAGUE_AVG_GF)
+        full_ga = base.get("goals_against_avg", LEAGUE_AVG_GA)
+        full_wr = base.get("win_rate", 0.5)
+        full_gp = max(1, base.get("games_played", 1))
+
+        # Estimate goalie sv% and team sh% from goals data (no future info)
+        sh_pct    = max(0.070, min(0.140, full_gf / NHL_AVG_SHOTS))
+        goalie_sv = max(0.870, min(0.940, 1.0 - full_ga / NHL_AVG_SHOTS))
+        pdo       = (sh_pct + goalie_sv) * 100
+
+        gsaa_per_game = (goalie_sv - LEAGUE_AVG_SV) * NHL_AVG_SHOTS
+
+        # Home / away splits
+        true_home_wr = base.get("home_win_rate", full_wr + 0.05)
+        true_away_wr = base.get("away_win_rate", full_wr - 0.05)
+
+        # L10 form
+        l10_gf = base.get("l10_gf_avg", full_gf)
+        l10_ga = base.get("l10_ga_avg", full_ga)
+        l10_wr = base.get("l10_win_rate", full_wr)
+
+        blended_gf = 0.65 * l10_gf + 0.35 * full_gf
+        blended_ga = 0.65 * l10_ga + 0.35 * full_ga
+        blended_wr = 0.65 * l10_wr + 0.35 * full_wr
+
+        # Pythagorean
+        pyth = (full_gf ** 2) / max(1e-6, (full_gf ** 2 + full_ga ** 2))
+
+        reg_wr   = base.get("reg_win_rate", full_wr)
+        ot_heavy = base.get("shootout_wins", 0) / full_gp
+
+        # Streak momentum
+        streak_code  = base.get("streak_code", "")
+        streak_count = base.get("streak_count", 0)
+        streak_signal = 0.0
+        if streak_code == "W":
+            streak_signal = min(0.04, streak_count * 0.008)
+        elif streak_code in ("L", "OT"):
+            streak_signal = -min(0.04, streak_count * 0.008)
+
+        # Back-to-back (checks schedule for yesterday's game — no look-ahead)
+        b2b, b2b_home = self._is_back_to_back(team_abbr, game_date)
+
+        pp_pct = base.get("powerplay_pct", 20)
+        pk_pct = base.get("penalty_kill_pct", 80)
+
+        return {
+            "team":              team_abbr,
+            "games_played":      full_gp,
+            "wins":              base.get("wins", 0),
+            "win_rate":          full_wr,
+            "home_win_rate":     true_home_wr,
+            "away_win_rate":     true_away_wr,
+            "goals_for_avg":     blended_gf,
+            "goals_against_avg": blended_ga,
+            "form":              blended_wr,
+            "powerplay_pct":     pp_pct,
+            "penalty_kill_pct":  pk_pct,
+            "save_pct":          goalie_sv,
+            # Advanced (estimated, no look-ahead)
+            "goalie_name":       "Est.",
+            "goalie_sv_pct":     round(goalie_sv, 4),
+            "goalie_gaa":        round(full_ga, 3),
+            "goalie_gsaa_pg":    round(gsaa_per_game, 3),
+            "team_sh_pct":       round(sh_pct, 4),
+            "pdo":               round(pdo, 2),
+            "pdo_label":         _pdo_label(pdo),
+            "l10_gf":            round(l10_gf, 3),
+            "l10_ga":            round(l10_ga, 3),
+            "l10_win_rate":      round(l10_wr, 3),
+            "pyth_win_pct":      round(pyth, 4),
+            "reg_win_rate":      round(reg_wr, 4),
+            "ot_heavy":          round(ot_heavy, 3),
+            "streak_code":       streak_code,
+            "streak_count":      streak_count,
+            "streak_signal":     round(streak_signal, 4),
+            "back_to_back":      b2b,
+            "b2b_is_home":       b2b_home,
+            "full_gf":           round(full_gf, 3),
+            "full_ga":           round(full_ga, 3),
+        }
+
     # ------------------------------------------------------------------ #
     # Internal helpers
     # ------------------------------------------------------------------ #
@@ -205,6 +306,7 @@ class NHLAdvancedStats:
         }
 
     def _get_team_schedule(self, abbrev: str) -> list:
+        """Current-season schedule (used for live analysis only)."""
         if abbrev in self._schedule_cache:
             return self._schedule_cache[abbrev]
         try:
@@ -219,22 +321,41 @@ class NHLAdvancedStats:
             print(f"  [adv] schedule error {abbrev}: {e}")
         return []
 
+    def _get_games_on_date(self, date_str: str) -> list:
+        """Fetch all finished games on a specific date (historical-safe)."""
+        cache_key = f"_date_games_{date_str}"
+        if hasattr(self, cache_key):
+            return getattr(self, cache_key)
+        games = []
+        try:
+            r = self.session.get(f"{self.BASE}/v1/schedule/{date_str}", timeout=8)
+            if r.status_code == 200:
+                for day in r.json().get("gameWeek", []):
+                    if day.get("date") != date_str:
+                        continue
+                    for g in day.get("games", []):
+                        if g.get("gameState") in ("OFF", "FINAL"):
+                            games.append(g)
+        except Exception as e:
+            print(f"  [adv] date-schedule error {date_str}: {e}")
+        setattr(self, cache_key, games)
+        return games
+
     def _is_back_to_back(self, abbrev: str, game_date: str) -> tuple[bool, Optional[bool]]:
         """
         Returns (is_b2b, is_home_in_this_game).
-        Checks if the team played yesterday.
+        Uses the historical schedule API so backtests work correctly for any season.
         """
         try:
             target = datetime.strptime(game_date, "%Y-%m-%d").date()
             yesterday = (target - timedelta(days=1)).strftime("%Y-%m-%d")
-            games = self._get_team_schedule(abbrev)
+            games = self._get_games_on_date(yesterday)
             for g in games:
-                if (g.get("gameDate") == yesterday and
-                        g.get("gameState") in ("OFF", "FINAL")):
-                    # Was this team home or away in the game_date game?
-                    home_abbrev = g.get("homeTeam", {}).get("abbrev", "")
-                    is_home = (home_abbrev != abbrev)  # home in today's game
-                    return True, is_home
+                home = g.get("homeTeam", {}).get("abbrev", "")
+                away = g.get("awayTeam", {}).get("abbrev", "")
+                if home == abbrev or away == abbrev:
+                    was_home_yesterday = (home == abbrev)
+                    return True, was_home_yesterday
         except Exception:
             pass
         return False, None

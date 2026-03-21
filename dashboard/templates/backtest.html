@@ -116,7 +116,7 @@
     <div class="page-title">Strategy Backtest</div>
 
     <div class="toolbar">
-        <form method="get" id="bt-form" style="display:contents;" onsubmit="startLoading()">
+        <form method="get" id="bt-form" style="display:contents;" onsubmit="handleSubmit(event)">
             <label>Strategy</label>
             <select name="strategy">
                 {% for key, desc in strategies.items() %}
@@ -127,14 +127,59 @@
             <input type="date" name="start" value="{{ start }}">
             <label>To</label>
             <input type="date" name="end" value="{{ end }}">
+            <input type="hidden" name="rerun" id="rerun-flag" value="0">
             <button type="submit" id="run-btn">Run Backtest</button>
+            <button type="button" id="rerun-btn" onclick="forceRerun()"
+                style="background:transparent;border:1px solid var(--border);color:var(--text2);font-size:0.78rem;padding:0.4rem 0.75rem;border-radius:var(--radius);cursor:pointer;">
+                Force Re-run
+            </button>
         </form>
-        <span style="font-size:0.78rem; color:var(--text3); margin-left:auto;">NHL · uses real game results from the NHL API</span>
+        <span style="font-size:0.78rem; color:var(--text3); margin-left:auto;">NHL · point-in-time stats · results cached in SQLite</span>
     </div>
 
+    {% if results and results._cached %}
+    <div style="background:var(--surface);border:1px solid var(--border);border-left:3px solid #2196F3;border-radius:var(--radius);padding:0.6rem 1rem;margin-bottom:1rem;font-size:0.8rem;color:var(--text2);display:flex;align-items:center;gap:0.75rem;">
+        <span style="color:#2196F3;font-weight:600;">&#9889; Cached result</span>
+        <span>Loaded instantly from database · originally run {{ results._cached_at }}</span>
+        <a href="?strategy={{ strategy }}&start={{ start }}&end={{ end }}&rerun=1"
+           style="margin-left:auto;color:var(--brand);font-weight:600;text-decoration:none;font-size:0.78rem;">Re-run fresh &#8594;</a>
+    </div>
+    {% endif %}
+
+    {% if cached_runs %}
+    <details style="margin-bottom:1rem;">
+        <summary style="cursor:pointer;font-size:0.8rem;color:var(--text2);font-weight:600;padding:0.4rem 0;">
+            &#128200; {{ cached_runs|length }} saved run{{ 's' if cached_runs|length != 1 else '' }} in database
+        </summary>
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);margin-top:0.4rem;overflow:hidden;">
+            <table style="width:100%;border-collapse:collapse;font-size:0.78rem;">
+                <thead><tr style="background:var(--bg2);">
+                    <th style="padding:0.5rem 0.85rem;text-align:left;color:var(--text2);">Strategy</th>
+                    <th style="padding:0.5rem 0.85rem;text-align:left;color:var(--text2);">Date Range</th>
+                    <th style="padding:0.5rem 0.85rem;text-align:left;color:var(--text2);">Last Run</th>
+                    <th style="padding:0.5rem 0.85rem;text-align:left;color:var(--text2);">Load</th>
+                </tr></thead>
+                <tbody>
+                {% for run in cached_runs %}
+                <tr style="border-top:1px solid var(--border);">
+                    <td style="padding:0.45rem 0.85rem;font-weight:600;">{{ run.strategy }}</td>
+                    <td style="padding:0.45rem 0.85rem;color:var(--text2);">{{ run.start_date }} → {{ run.end_date }}</td>
+                    <td style="padding:0.45rem 0.85rem;color:var(--text3);">{{ run.run_at }}</td>
+                    <td style="padding:0.45rem 0.85rem;">
+                        <a href="?strategy={{ run.strategy }}&start={{ run.start_date }}&end={{ run.end_date }}"
+                           style="color:var(--brand);font-weight:600;text-decoration:none;font-size:0.76rem;">Load &#8594;</a>
+                    </td>
+                </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </details>
+    {% endif %}
+
     <div id="loading">
-        <div class="loading-title">⏳ Fetching real NHL results…</div>
-        <div class="loading-sub">Pulling historical game data from the NHL API — this takes a few seconds</div>
+        <div class="loading-title">&#9203; Fetching real NHL results…</div>
+        <div class="loading-sub">Pulling point-in-time historical data from the NHL API — this takes a few seconds</div>
         <div class="progress-track">
             <div class="progress-bar" id="progress-bar"></div>
         </div>
@@ -152,6 +197,15 @@
             bar.style.width = w + '%';
             if (w >= 90) clearInterval(iv);
         }, 300);
+    }
+    function handleSubmit(e) {
+        // Only show loading if this is a fresh run (no cache hit expected)
+        startLoading();
+    }
+    function forceRerun() {
+        document.getElementById('rerun-flag').value = '1';
+        document.getElementById('bt-form').dispatchEvent(new Event('submit'));
+        document.getElementById('bt-form').submit();
     }
     </script>
 
@@ -250,6 +304,101 @@
         });
     })();
     </script>
+
+    {% if results.metrics.by_month %}
+    <div style="margin-bottom:1.25rem;">
+        <div style="font-size:0.78rem;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:0.5rem;">Monthly Breakdown</div>
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;">
+            <table style="width:100%;border-collapse:collapse;font-size:0.78rem;">
+                <thead><tr style="background:var(--bg2);">
+                    <th style="padding:0.45rem 0.85rem;text-align:left;color:var(--text2);font-weight:600;">Month</th>
+                    <th style="padding:0.45rem 0.85rem;text-align:right;color:var(--text2);font-weight:600;">Bets</th>
+                    <th style="padding:0.45rem 0.85rem;text-align:right;color:var(--text2);font-weight:600;">Win Rate</th>
+                    <th style="padding:0.45rem 0.85rem;text-align:right;color:var(--text2);font-weight:600;">Profit</th>
+                    <th style="padding:0.45rem 0.85rem;text-align:right;color:var(--text2);font-weight:600;">ROI</th>
+                </tr></thead>
+                <tbody>
+                {% for mo in results.metrics.by_month %}
+                <tr style="border-top:1px solid var(--border);">
+                    <td style="padding:0.4rem 0.85rem;font-weight:600;">{{ mo.month }}</td>
+                    <td style="padding:0.4rem 0.85rem;text-align:right;color:var(--text2);">{{ mo.bets }}</td>
+                    <td style="padding:0.4rem 0.85rem;text-align:right;color:var(--text2);">{{ "%.1f"|format(mo.win_rate * 100) }}%</td>
+                    <td style="padding:0.4rem 0.85rem;text-align:right;font-weight:600;color:{{ 'var(--success)' if mo.profit > 0 else 'var(--danger)' }}">
+                        ${{ "%+.0f"|format(mo.profit) }}
+                    </td>
+                    <td style="padding:0.4rem 0.85rem;text-align:right;color:{{ 'var(--success)' if mo.roi > 0 else 'var(--danger)' }}">
+                        {{ "%+.1f"|format(mo.roi) }}%
+                    </td>
+                </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        <div style="font-size:0.72rem;color:var(--text3);margin-top:0.35rem;">
+            &#9888; Months with few bets (&lt;10) have high variance — don't over-interpret. Early season excluded (teams need ≥10 games of data).
+        </div>
+    </div>
+    {% endif %}
+
+    {% if results.metrics.calibration %}
+    <div style="margin-bottom:1.25rem;">
+        <div style="font-size:0.78rem;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:0.35rem;">Signal Calibration — does model confidence match real outcomes?</div>
+        <div style="font-size:0.72rem;color:var(--text3);margin-bottom:0.5rem;">
+            A well-calibrated model has <strong>Actual ≈ Predicted</strong>. <strong>Edge = Actual win rate − Break-even</strong> at those odds — positive edge means the signal beats the market, independent of odds quality.
+        </div>
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;">
+            <table style="width:100%;border-collapse:collapse;font-size:0.78rem;">
+                <thead><tr style="background:var(--bg2);">
+                    <th style="padding:0.45rem 0.85rem;text-align:left;color:var(--text2);">Confidence Band</th>
+                    <th style="padding:0.45rem 0.85rem;text-align:right;color:var(--text2);">Bets</th>
+                    <th style="padding:0.45rem 0.85rem;text-align:right;color:var(--text2);">Predicted win%</th>
+                    <th style="padding:0.45rem 0.85rem;text-align:right;color:var(--text2);">Actual win%</th>
+                    <th style="padding:0.45rem 0.85rem;text-align:right;color:var(--text2);">Break-even%</th>
+                    <th style="padding:0.45rem 0.85rem;text-align:right;color:var(--text2);">Edge over market</th>
+                    <th style="padding:0.45rem 0.85rem;text-align:left;color:var(--text2);">Signal quality</th>
+                </tr></thead>
+                <tbody>
+                {% for row in results.metrics.calibration %}
+                {% set calib_ok = (row.actual - row.predicted)|abs < 5 %}
+                {% set has_edge = row.edge > 0 %}
+                <tr style="border-top:1px solid var(--border);">
+                    <td style="padding:0.4rem 0.85rem;font-weight:600;">{{ row.band }}</td>
+                    <td style="padding:0.4rem 0.85rem;text-align:right;color:var(--text2);">{{ row.bets }}</td>
+                    <td style="padding:0.4rem 0.85rem;text-align:right;color:var(--text2);">{{ row.predicted }}%</td>
+                    <td style="padding:0.4rem 0.85rem;text-align:right;font-weight:600;color:{{ 'var(--success)' if calib_ok else 'var(--danger)' }}">
+                        {{ row.actual }}%
+                        {% if not calib_ok %}<span style="font-size:0.68rem;font-weight:400;"> (off by {{ (row.actual - row.predicted)|abs|round(1) }}pp)</span>{% endif %}
+                    </td>
+                    <td style="padding:0.4rem 0.85rem;text-align:right;color:var(--text3);">{{ row.breakeven }}%</td>
+                    <td style="padding:0.4rem 0.85rem;text-align:right;font-weight:600;color:{{ 'var(--success)' if has_edge else 'var(--danger)' }}">
+                        {{ "%+.1f"|format(row.edge) }}%
+                    </td>
+                    <td style="padding:0.4rem 0.85rem;font-size:0.72rem;">
+                        {% set over = row.actual < row.predicted - 5 %}
+                        {% set under = row.actual > row.predicted + 5 %}
+                        {% if calib_ok and has_edge %}
+                            <span style="color:var(--success);">&#10003; Calibrated, beats market</span>
+                        {% elif under and has_edge %}
+                            <span style="color:var(--success);">&#10003; Conservative — actual edge higher than model thinks</span>
+                        {% elif under and not has_edge %}
+                            <span style="color:var(--warning);">&#9888; Conservative but can't beat vig</span>
+                        {% elif over and has_edge %}
+                            <span style="color:var(--warning);">&#9888; Overconfident but still profitable</span>
+                        {% elif over and not has_edge %}
+                            <span style="color:var(--danger);">&#10007; Overconfident, losing money</span>
+                        {% elif not has_edge %}
+                            <span style="color:var(--warning);">&#9888; Calibrated but can't beat vig</span>
+                        {% else %}
+                            <span style="color:var(--success);">&#10003; Real signal, beats market</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% endif %}
 
     <div class="legend">
         <span><strong>Model %</strong> — agent consensus win probability</span>

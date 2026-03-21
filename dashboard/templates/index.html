@@ -77,7 +77,6 @@
         .odds-cell { font-weight: 700; font-variant-numeric: tabular-nums; }
         .score-cell { font-family: 'SF Mono', monospace; color: var(--text2); white-space: nowrap; font-size: 0.78rem; }
         .kelly-cell { color: var(--brand); font-weight: 600; font-size: 0.8rem; }
-        .reason-cell { color: var(--text2); font-size: 0.75rem; max-width: 220px; line-height: 1.4; }
 
         /* Context row with signals */
         .ctx-row td { background: var(--bg); border-bottom: 2px solid var(--border) !important; padding: 0.5rem 0.75rem; }
@@ -88,8 +87,6 @@
         .chip-b2b          { background: #FFF3CD; color: #7B5800; border-color: #FFD600; }
         .chip-goalie-elite { background: var(--success-bg); color: var(--success); border-color: #9BDFB8; }
         .chip-goalie-weak  { background: var(--danger-bg); color: var(--danger); border-color: #F5B4B4; }
-        .chip-streak-win   { background: #E8F5EE; color: #2D7A4F; border-color: #9BDFB8; }
-        .chip-streak-loss  { background: var(--danger-bg); color: var(--danger); border-color: #F5B4B4; }
 
         /* Agent panel */
         .agents-row td { background: #FAFAFA; border-bottom: 2px solid var(--border) !important; }
@@ -101,6 +98,16 @@
 
         .expand-btn { background: none; border: 1px solid var(--border); border-radius: 4px; color: var(--text2); cursor: pointer; padding: 0.18rem 0.5rem; font-size: 0.7rem; font-family: inherit; transition: all 0.15s; }
         .expand-btn:hover { background: var(--brand-light); color: var(--brand); border-color: var(--brand); }
+
+        /* Loading state */
+        #loading-state { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 5rem 2rem; gap: 1.5rem; }
+        .hockey-spinner { animation: spin 1.2s linear infinite; }
+        @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+        .loading-text { color: var(--text2); font-size: 0.95rem; font-weight: 500; }
+        .loading-sub  { color: var(--text3); font-size: 0.8rem; margin-top: -1rem; }
+
+        #data-state { display: none; }
+        #error-state { display: none; padding: 3rem; text-align: center; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); }
 
         footer { text-align: center; padding: 2rem; color: var(--text3); font-size: 0.78rem; border-top: 1px solid var(--border); margin-top: 2rem; }
     </style>
@@ -126,144 +133,239 @@
         <a href="/?sport=nhl&strategy={{ strategy }}" class="sport-tab {{ 'active' if sport == 'nhl' else '' }}">🏒 NHL</a>
         <div class="divider"></div>
         <label>Strategy</label>
-        <select onchange="window.location.href='/?sport={{ sport }}&strategy='+this.value">
+        <select id="strategy-select" onchange="changeStrategy(this.value)">
             {% for key, desc in strategies.items() %}
             <option value="{{ key }}" {{ 'selected' if strategy == key else '' }}>{{ desc }}</option>
             {% endfor %}
         </select>
-        <span class="gen-time">Generated {{ generated }}</span>
+        <span class="gen-time" id="gen-time">Loading…</span>
+        <button onclick="loadData(true)" id="refresh-btn" style="margin-left:0.5rem; padding:0.35rem 0.85rem; background:var(--bg); border:1px solid var(--border); border-radius:6px; font-size:0.8rem; font-family:inherit; cursor:pointer; color:var(--text2);">↻ Refresh</button>
     </div>
 
-    {% set bets = opportunities | selectattr('should_bet') | list %}
-    <div class="pills">
-        <div class="pill"><strong>{{ opportunities | length }}</strong> opportunities analysed</div>
-        <div class="pill highlight"><strong>{{ bets | length }}</strong> value bets flagged</div>
-        <div class="pill"><strong>{{ opportunities | selectattr('confidence', 'equalto', 'high') | list | length }}</strong> high confidence</div>
-        <div class="pill"><strong>{{ opportunities | selectattr('home_b2b') | list | length + opportunities | selectattr('away_b2b') | list | length }}</strong> B2B alerts</div>
+    <!-- Pills (populated after fetch) -->
+    <div class="pills" id="pills" style="display:none;">
+        <div class="pill"><strong id="pill-total">—</strong> opportunities analysed</div>
+        <div class="pill highlight"><strong id="pill-bets">—</strong> value bets flagged</div>
+        <div class="pill"><strong id="pill-high">—</strong> high confidence</div>
+        <div class="pill"><strong id="pill-b2b">—</strong> B2B alerts</div>
     </div>
 
-    {% if opportunities %}
-    <div class="legend">
-        <span><strong>Model %</strong> — agent-weighted consensus probability</span>
-        <span><strong>Market %</strong> — book implied (vig removed)</span>
-        <span><strong>Edge</strong> — Model minus Market; &gt;3% = value</span>
-        <span><strong>EV</strong> — expected return per $1</span>
-        <span><strong>Kelly %</strong> — fractional Kelly stake recommendation</span>
-        <span><strong>PDO</strong> — shooting% + save% (>102 = lucky→regress)</span>
-        <span><strong>B2B</strong> — team played yesterday (significant fatigue penalty)</span>
-        <span><strong>Pyth%</strong> — Pythagorean win expectation (GF²/GF²+GA²)</span>
+    <!-- Loading spinner -->
+    <div id="loading-state">
+        <svg class="hockey-spinner" width="64" height="64" viewBox="0 0 64 64" fill="none">
+            <circle cx="32" cy="32" r="28" stroke="#E5E2DC" stroke-width="6"/>
+            <path d="M32 4 A28 28 0 0 1 60 32" stroke="#CF4E2E" stroke-width="6" stroke-linecap="round"/>
+            <!-- puck -->
+            <ellipse cx="32" cy="54" rx="8" ry="3" fill="#CF4E2E" opacity="0.18"/>
+            <!-- stick -->
+            <path d="M20 28 L36 44 L44 44" stroke="#CF4E2E" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M36 44 L44 44 L44 48" stroke="#CF4E2E" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        <div class="loading-text">Analysing today's games…</div>
+        <div class="loading-sub">Fetching NHL stats, odds, and running models — takes ~30s</div>
     </div>
 
-    <div class="table-wrap">
-        <table>
-            <thead>
-                <tr>
-                    <th>Time</th>
-                    <th>Match</th>
-                    <th>Market</th>
-                    <th>Pick</th>
-                    <th>Odds</th>
-                    <th>Model %</th>
-                    <th>Market %</th>
-                    <th>Edge</th>
-                    <th>EV</th>
-                    <th>Kelly %</th>
-                    <th>Score Pred</th>
-                    <th>Total/Line</th>
-                    <th>Over %</th>
-                    <th>Conf</th>
-                    <th>Action</th>
-                    <th>Details</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for o in opportunities %}
-                {# Only show context row once per game (on first row of a game) #}
-                {% set game_key = o.home_team ~ o.away_team ~ o.date %}
-                {% if loop.first or (opportunities[loop.index0-1].home_team ~ opportunities[loop.index0-1].away_team ~ opportunities[loop.index0-1].date) != game_key %}
-                <tr class="ctx-row" id="ctx-{{ loop.index }}">
-                    <td colspan="16">
-                        <div class="signals">
-                            <span style="font-size:0.72rem; color:var(--text2); font-weight:600;">{{ o.away_team }} @ {{ o.home_team }}</span>
-                            {% if o.home_b2b %}<span class="signal-chip chip-b2b">⚡ {{ o.home_team }} B2B</span>{% endif %}
-                            {% if o.away_b2b %}<span class="signal-chip chip-b2b">⚡ {{ o.away_team }} B2B (road)</span>{% endif %}
-                            {% if o.home_pdo_label in ('lucky','very_lucky') %}<span class="signal-chip chip-pdo-lucky">{{ o.home_team }} PDO {{ o.home_pdo }} (lucky→regress)</span>{% endif %}
-                            {% if o.away_pdo_label in ('lucky','very_lucky') %}<span class="signal-chip chip-pdo-lucky">{{ o.away_team }} PDO {{ o.away_pdo }} (lucky→regress)</span>{% endif %}
-                            {% if o.home_pdo_label in ('unlucky','very_unlucky') %}<span class="signal-chip chip-pdo-unlucky">{{ o.home_team }} PDO {{ o.home_pdo }} (unlucky→improve)</span>{% endif %}
-                            {% if o.away_pdo_label in ('unlucky','very_unlucky') %}<span class="signal-chip chip-pdo-unlucky">{{ o.away_team }} PDO {{ o.away_pdo }} (unlucky→improve)</span>{% endif %}
-                            {% if o.home_goalie_sv and o.home_goalie_sv >= 91.8 %}<span class="signal-chip chip-goalie-elite">🥅 {{ o.home_goalie }} {{ o.home_goalie_sv }}%</span>{% endif %}
-                            {% if o.away_goalie_sv and o.away_goalie_sv >= 91.8 %}<span class="signal-chip chip-goalie-elite">🥅 {{ o.away_goalie }} {{ o.away_goalie_sv }}%</span>{% endif %}
-                            {% if o.home_goalie_sv and o.home_goalie_sv < 90.0 %}<span class="signal-chip chip-goalie-weak">⚠ {{ o.home_goalie }} {{ o.home_goalie_sv }}%</span>{% endif %}
-                            {% if o.away_goalie_sv and o.away_goalie_sv < 90.0 %}<span class="signal-chip chip-goalie-weak">⚠ {{ o.away_goalie }} {{ o.away_goalie_sv }}%</span>{% endif %}
-                            <span class="muted" style="font-size:0.7rem; margin-left:auto;">
-                                Pyth: {{ o.home_team }} {{ o.home_pyth }}% · {{ o.away_team }} {{ o.away_pyth }}%
-                            </span>
-                        </div>
-                    </td>
-                </tr>
-                {% endif %}
-
-                <tr class="{{ 'bet-row' if o.should_bet else '' }}" id="row-{{ loop.index }}">
-                    <td class="muted" style="font-size:0.76rem;">{{ o.start_time | default('TBD') }}</td>
-                    <td class="match-cell">{{ o.match }}</td>
-                    <td class="market-cell">{{ o.market }}</td>
-                    <td class="pick-cell">{{ o.win_pick | default('—') }}</td>
-                    <td class="odds-cell">{{ "%.2f"|format(o.odds) }}</td>
-                    <td class="{{ 'positive' if o.model_prob > 0.5 else 'muted' }}">{{ "%.1f"|format(o.model_prob * 100) }}%</td>
-                    <td class="muted">{{ "%.1f"|format(o.implied_prob * 100) }}%</td>
-                    <td class="{{ 'positive' if o.edge > 0.03 else ('negative' if o.edge < 0 else 'muted') }}">{{ "%+.1f"|format(o.edge * 100) }}%</td>
-                    <td class="{{ 'positive' if o.ev > 0 else 'negative' }}">{{ "%+.1f"|format(o.ev * 100) }}%</td>
-                    <td class="kelly-cell">
-                        {% if o.kelly and o.kelly > 0 %}
-                        {{ "%.1f"|format(o.kelly * 100) }}%
-                        {% else %}—{% endif %}
-                    </td>
-                    <td class="score-cell">{{ o.score_pred | default('—') }}</td>
-                    <td class="score-cell">{{ o.pred_total | default('—') }} / {{ o.ou_line | default('6.5') }}</td>
-                    <td class="muted">{{ o.over_prob | default('—') }}%</td>
-                    <td><span class="badge badge-{{ o.confidence | default('medium') }}">{{ (o.confidence | default('medium')) | upper }}</span></td>
-                    <td><span class="badge {{ 'badge-bet' if o.should_bet else 'badge-skip' }}">{{ 'BET' if o.should_bet else 'SKIP' }}</span></td>
-                    <td>
-                        {% if o.agent_votes %}
-                        <button class="expand-btn" onclick="toggleAgents({{ loop.index }})">agents ▾</button>
-                        {% endif %}
-                    </td>
-                </tr>
-
-                {% if o.agent_votes %}
-                <tr class="agents-row" id="agents-{{ loop.index }}" style="display:none;">
-                    <td colspan="16">
-                        <div class="agent-cards">
-                            {% for av in o.agent_votes %}
-                            <div class="agent-card">
-                                <div class="agent-card-name">{{ av.agent }}</div>
-                                <div class="agent-card-vote">
-                                    ML: <strong>{{ av.ml | upper }}</strong> {{ av.ml_conf }}%
-                                    &nbsp;·&nbsp; O/U: <strong>{{ av.ou | upper }}</strong> {{ av.ou_conf }}%
-                                </div>
-                                <div class="agent-card-reason">{{ av.reasoning[:220] }}{% if av.reasoning | length > 220 %}…{% endif %}</div>
-                            </div>
-                            {% endfor %}
-                        </div>
-                    </td>
-                </tr>
-                {% endif %}
-                {% endfor %}
-            </tbody>
-        </table>
+    <!-- Error state -->
+    <div id="error-state">
+        <div style="font-size:2rem; margin-bottom:0.5rem;">⚠️</div>
+        <div style="font-weight:600; margin-bottom:0.25rem;">Analysis failed</div>
+        <div id="error-msg" style="font-size:0.875rem; color:var(--text2);"></div>
+        <button onclick="loadData()" style="margin-top:1rem; padding:0.5rem 1.25rem; background:var(--brand); color:white; border:none; border-radius:6px; cursor:pointer; font-size:0.875rem; font-family:inherit;">Retry</button>
     </div>
-    {% else %}
-    <div style="background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:3rem; text-align:center; color:var(--text2);">
-        <div style="font-size:2rem; margin-bottom:0.5rem;">🏒</div>
-        <div style="font-weight:600;">No games found</div>
-        <div style="font-size:0.875rem; margin-top:0.25rem;">The NHL API may be between seasons or temporarily unavailable.</div>
+
+    <!-- Data (shown after fetch) -->
+    <div id="data-state">
+        <div class="legend">
+            <span><strong>Model %</strong> — agent-weighted consensus probability</span>
+            <span><strong>Market %</strong> — book implied (vig removed)</span>
+            <span><strong>Edge</strong> — Model minus Market; &gt;3% = value</span>
+            <span><strong>EV</strong> — expected return per $1</span>
+            <span><strong>Kelly %</strong> — fractional Kelly stake recommendation</span>
+            <span><strong>PDO</strong> — shooting% + save% (>102 = lucky→regress)</span>
+            <span><strong>B2B</strong> — team played yesterday (fatigue penalty)</span>
+            <span><strong>Pyth%</strong> — Pythagorean win expectation</span>
+        </div>
+        <div class="table-wrap">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Time</th>
+                        <th>Match</th>
+                        <th>Market</th>
+                        <th>Pick</th>
+                        <th>Odds</th>
+                        <th>Model %</th>
+                        <th>Market %</th>
+                        <th>Edge</th>
+                        <th>EV</th>
+                        <th>Kelly %</th>
+                        <th>Score Pred</th>
+                        <th>Total/Line</th>
+                        <th>Over %</th>
+                        <th>Conf</th>
+                        <th>Action</th>
+                        <th>Details</th>
+                    </tr>
+                </thead>
+                <tbody id="table-body"></tbody>
+            </table>
+        </div>
+        <div id="no-games" style="display:none; background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:3rem; text-align:center; color:var(--text2);">
+            <div style="font-size:2rem; margin-bottom:0.5rem;">🏒</div>
+            <div style="font-weight:600;">No games found</div>
+            <div style="font-size:0.875rem; margin-top:0.25rem;">The NHL API may be between seasons or temporarily unavailable.</div>
+        </div>
     </div>
-    {% endif %}
 </div>
 
 <footer>BetBrain — For analysis purposes only. No real money. Gamble responsibly.</footer>
 
 <script>
+const CURRENT_STRATEGY = '{{ strategy }}';
+const CURRENT_SPORT    = '{{ sport }}';
+
+function changeStrategy(val) {
+    window.location.href = '/?sport=' + CURRENT_SPORT + '&strategy=' + val;
+}
+
+function fmt(n, decimals=1) {
+    return n != null ? n.toFixed(decimals) : '—';
+}
+function fmtPct(n, decimals=1) {
+    return n != null ? (n * 100).toFixed(decimals) + '%' : '—';
+}
+function fmtSignedPct(n, decimals=1) {
+    if (n == null) return '—';
+    const s = (n * 100).toFixed(decimals);
+    return (n >= 0 ? '+' : '') + s + '%';
+}
+function clsEdge(v) {
+    if (v == null) return 'muted';
+    return v > 0.03 ? 'positive' : (v < 0 ? 'negative' : 'muted');
+}
+function clsEV(v)   { return (v != null && v > 0) ? 'positive' : 'negative'; }
+function clsModel(v){ return (v != null && v > 0.5) ? 'positive' : 'muted'; }
+
+function chip(cls, text) {
+    return `<span class="signal-chip ${cls}">${text}</span>`;
+}
+
+function buildRows(opps) {
+    if (!opps || opps.length === 0) {
+        document.getElementById('no-games').style.display = '';
+        document.getElementById('table-body').closest('.table-wrap').style.display = 'none';
+        return;
+    }
+
+    let html = '';
+    let lastGameKey = null;
+    let lastDate = null;
+
+    opps.forEach((o, i) => {
+        const idx = i + 1;
+        const gameKey = (o.home_team || '') + (o.away_team || '') + (o.date || '');
+
+        // Date separator row
+        if (o.date && o.date !== lastDate) {
+            lastDate = o.date;
+            const d = new Date(o.date + 'T12:00:00');
+            const label = d.toLocaleDateString('en-ZA', { weekday: 'long', day: 'numeric', month: 'long' });
+            html += `<tr><td colspan="16" style="background:var(--surface2); padding:0.5rem 0.75rem; font-size:0.72rem; font-weight:700; color:var(--text2); text-transform:uppercase; letter-spacing:0.06em; border-bottom:1px solid var(--border);">${label}</td></tr>`;
+        }
+
+        if (gameKey !== lastGameKey) {
+            lastGameKey = gameKey;
+            let signals = `<span style="font-size:0.72rem; color:var(--text2); font-weight:600;">${o.away_team || ''} @ ${o.home_team || ''}</span>`;
+            if (o.home_b2b) signals += chip('chip-b2b', `⚡ ${o.home_team} B2B`);
+            if (o.away_b2b) signals += chip('chip-b2b', `⚡ ${o.away_team} B2B (road)`);
+            if (['lucky','very_lucky'].includes(o.home_pdo_label)) signals += chip('chip-pdo-lucky', `${o.home_team} PDO ${o.home_pdo} (lucky→regress)`);
+            if (['lucky','very_lucky'].includes(o.away_pdo_label)) signals += chip('chip-pdo-lucky', `${o.away_team} PDO ${o.away_pdo} (lucky→regress)`);
+            if (['unlucky','very_unlucky'].includes(o.home_pdo_label)) signals += chip('chip-pdo-unlucky', `${o.home_team} PDO ${o.home_pdo} (unlucky→improve)`);
+            if (['unlucky','very_unlucky'].includes(o.away_pdo_label)) signals += chip('chip-pdo-unlucky', `${o.away_team} PDO ${o.away_pdo} (unlucky→improve)`);
+            if (o.home_goalie_sv >= 91.8) signals += chip('chip-goalie-elite', `🥅 ${o.home_goalie} ${o.home_goalie_sv}%`);
+            if (o.away_goalie_sv >= 91.8) signals += chip('chip-goalie-elite', `🥅 ${o.away_goalie} ${o.away_goalie_sv}%`);
+            if (o.home_goalie_sv && o.home_goalie_sv < 90.0) signals += chip('chip-goalie-weak', `⚠ ${o.home_goalie} ${o.home_goalie_sv}%`);
+            if (o.away_goalie_sv && o.away_goalie_sv < 90.0) signals += chip('chip-goalie-weak', `⚠ ${o.away_goalie} ${o.away_goalie_sv}%`);
+            const pyth = `<span class="muted" style="font-size:0.7rem; margin-left:auto;">Pyth: ${o.home_team} ${o.home_pyth}% · ${o.away_team} ${o.away_pyth}%</span>`;
+            html += `<tr class="ctx-row"><td colspan="16"><div class="signals">${signals}${pyth}</div></td></tr>`;
+        }
+
+        const conf = o.confidence || 'medium';
+        const bet  = !!o.should_bet;
+        const kelly = (o.kelly && o.kelly > 0) ? fmtPct(o.kelly) : '—';
+        const agentBtn = (o.agent_votes && o.agent_votes.length)
+            ? `<button class="expand-btn" onclick="toggleAgents(${idx})">agents ▾</button>` : '';
+
+        html += `<tr class="${bet ? 'bet-row' : ''}" id="row-${idx}">
+            <td class="muted" style="font-size:0.76rem;">${o.start_time || 'TBD'}</td>
+            <td class="match-cell">${o.match || ''}</td>
+            <td class="market-cell">${o.market || ''}</td>
+            <td class="pick-cell">${o.win_pick || '—'}</td>
+            <td class="odds-cell">${fmt(o.odds, 2)}</td>
+            <td class="${clsModel(o.model_prob)}">${fmtPct(o.model_prob)}</td>
+            <td class="muted">${fmtPct(o.implied_prob)}</td>
+            <td class="${clsEdge(o.edge)}">${fmtSignedPct(o.edge)}</td>
+            <td class="${clsEV(o.ev)}">${fmtSignedPct(o.ev)}</td>
+            <td class="kelly-cell">${kelly}</td>
+            <td class="score-cell">${o.score_pred || '—'}</td>
+            <td class="score-cell">${o.pred_total || '—'} / ${o.ou_line || '6.5'}</td>
+            <td class="muted">${o.over_prob != null ? o.over_prob + '%' : '—'}</td>
+            <td><span class="badge badge-${conf}">${conf.toUpperCase()}</span></td>
+            <td><span class="badge ${bet ? 'badge-bet' : 'badge-skip'}">${bet ? 'BET' : 'SKIP'}</span></td>
+            <td>${agentBtn}</td>
+        </tr>`;
+
+        if (o.agent_votes && o.agent_votes.length) {
+            const cards = o.agent_votes.map(av => `
+                <div class="agent-card">
+                    <div class="agent-card-name">${av.agent}</div>
+                    <div class="agent-card-vote">ML: <strong>${(av.ml || '').toUpperCase()}</strong> ${av.ml_conf}% &nbsp;·&nbsp; O/U: <strong>${(av.ou || '').toUpperCase()}</strong> ${av.ou_conf}%</div>
+                    <div class="agent-card-reason">${(av.reasoning || '').slice(0, 220)}${(av.reasoning || '').length > 220 ? '…' : ''}</div>
+                </div>`).join('');
+            html += `<tr class="agents-row" id="agents-${idx}" style="display:none;"><td colspan="16"><div class="agent-cards">${cards}</div></td></tr>`;
+        }
+    });
+
+    document.getElementById('table-body').innerHTML = html;
+}
+
+function updatePills(opps) {
+    const bets   = opps.filter(o => o.should_bet).length;
+    const high   = opps.filter(o => o.confidence === 'high').length;
+    const b2b    = opps.filter(o => o.home_b2b).length + opps.filter(o => o.away_b2b).length;
+    document.getElementById('pill-total').textContent = opps.length;
+    document.getElementById('pill-bets').textContent  = bets;
+    document.getElementById('pill-high').textContent  = high;
+    document.getElementById('pill-b2b').textContent   = b2b;
+    document.getElementById('pills').style.display    = '';
+}
+
+function loadData(force) {
+    document.getElementById('loading-state').style.display = '';
+    document.getElementById('error-state').style.display   = 'none';
+    document.getElementById('data-state').style.display    = 'none';
+    document.getElementById('pills').style.display         = 'none';
+
+    const url = '/api/analyze?strategy=' + CURRENT_STRATEGY + '&sport=' + CURRENT_SPORT + (force ? '&refresh=1' : '');
+    fetch(url)
+        .then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+        .then(opps => {
+            // Sort by edge desc (same as server used to do)
+            opps.sort((a, b) => (b.edge || 0) - (a.edge || 0));
+            buildRows(opps);
+            updatePills(opps);
+            saveToCache(opps);
+            document.getElementById('gen-time').textContent = 'Generated ' + new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
+            document.getElementById('loading-state').style.display = 'none';
+            document.getElementById('data-state').style.display    = 'block';
+        })
+        .catch(err => {
+            document.getElementById('loading-state').style.display = 'none';
+            document.getElementById('error-state').style.display   = '';
+            document.getElementById('error-msg').textContent       = err.message;
+        });
+}
+
 function toggleAgents(idx) {
     const row = document.getElementById('agents-' + idx);
     if (!row) return;
@@ -271,6 +373,51 @@ function toggleAgents(idx) {
     row.style.display = vis ? 'none' : 'table-row';
     const btn = document.querySelector('#row-' + idx + ' .expand-btn');
     if (btn) btn.textContent = vis ? 'agents ▾' : 'agents ▴';
+}
+
+const LS_KEY = 'betbrain_analysis_' + CURRENT_STRATEGY;
+const LS_TTL = 30 * 60 * 1000; // 30 minutes in ms
+
+function saveToCache(opps) {
+    try {
+        localStorage.setItem(LS_KEY, JSON.stringify({ opps, ts: Date.now() }));
+    } catch(e) {}
+}
+
+function loadFromCache() {
+    try {
+        const raw = localStorage.getItem(LS_KEY);
+        if (!raw) return null;
+        const { opps, ts } = JSON.parse(raw);
+        if (Date.now() - ts < LS_TTL) return opps;
+    } catch(e) {}
+    return null;
+}
+
+// Start: show cached data instantly, then refresh in background
+const cached = loadFromCache();
+if (cached) {
+    cached.sort((a, b) => (b.edge || 0) - (a.edge || 0));
+    buildRows(cached);
+    updatePills(cached);
+    document.getElementById('gen-time').textContent = 'Cached — refreshing…';
+    document.getElementById('loading-state').style.display = 'none';
+    document.getElementById('data-state').style.display    = 'block';
+    // Silently refresh in background
+    fetch('/api/analyze?strategy=' + CURRENT_STRATEGY + '&sport=' + CURRENT_SPORT)
+        .then(r => r.json())
+        .then(opps => {
+            opps.sort((a, b) => (b.edge || 0) - (a.edge || 0));
+            buildRows(opps);
+            updatePills(opps);
+            saveToCache(opps);
+            document.getElementById('gen-time').textContent = 'Generated ' + new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
+        })
+        .catch(() => {
+            document.getElementById('gen-time').textContent = 'Showing cached data';
+        });
+} else {
+    loadData();
 }
 </script>
 </body>

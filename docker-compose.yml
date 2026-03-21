@@ -1,0 +1,16 @@
+services:
+  betbrain:
+    build: .
+    ports:
+      - "5556:5556"
+    volumes:
+      # All SQLite data (paper trades, backtest cache, historical odds) persists here
+      - betbrain-data:/data
+    env_file:
+      - .env
+    environment:
+      - TZ=Africa/Johannesburg
+    restart: unless-stopped
+
+volumes:
+  betbrain-data:

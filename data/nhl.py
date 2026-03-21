@@ -122,91 +122,106 @@ class NHLDataFetcher:
 
         return games
     
+    def _load_standings_for_date(self, date: str) -> Dict[str, Dict]:
+        """Fetch point-in-time standings as of a specific date (YYYY-MM-DD).
+        Uses the same NHL API structure as /now but with a historical date.
+        Results are cached by date so each date is only fetched once per session.
+        """
+        cache_attr = f"_standings_date_cache"
+        if not hasattr(self, cache_attr):
+            setattr(self, cache_attr, {})
+        cache = getattr(self, cache_attr)
+        if date in cache:
+            return cache[date]
+        try:
+            url = f"{self.BASE_URL}/v1/standings/{date}"
+            resp = self.session.get(url, timeout=8)
+            if resp.status_code == 200:
+                result = self._parse_standings_response(resp.json())
+                cache[date] = result
+                return result
+        except Exception as e:
+            print(f"Standings-for-date API error ({date}): {e}")
+        return {}
+
+    def _parse_standings_response(self, data: dict) -> Dict[str, Dict]:
+        """Parse a NHL standings API response (works for both /now and /{date})."""
+        result = {}
+        for t in data.get("standings", []):
+            abbrev_raw = t.get("teamAbbrev", {})
+            abbrev = abbrev_raw.get("default", "") if isinstance(abbrev_raw, dict) else str(abbrev_raw)
+            if not abbrev:
+                continue
+            gp      = max(1, t.get("gamesPlayed", 1))
+            wins    = t.get("wins", 0)
+            losses  = t.get("losses", 0)
+            ot      = t.get("otLosses", 0)
+            gf      = t.get("goalFor", 0)
+            ga      = t.get("goalAgainst", 0)
+            reg_w   = t.get("regulationWins", wins)
+            so_w    = t.get("shootoutWins", 0)
+
+            h_gp   = max(1, t.get("homeGamesPlayed", gp // 2))
+            h_wins = t.get("homeWins", 0)
+            h_gf   = t.get("homeGoalsFor", 0)
+            h_ga   = t.get("homeGoalsAgainst", 0)
+
+            r_gp   = max(1, t.get("roadGamesPlayed", gp // 2))
+            r_wins = t.get("roadWins", 0)
+            r_gf   = t.get("roadGoalsFor", 0)
+            r_ga   = t.get("roadGoalsAgainst", 0)
+
+            l10_gp   = max(1, t.get("l10GamesPlayed", 10))
+            l10_wins = t.get("l10Wins", 0)
+            l10_gf   = t.get("l10GoalsFor", 0)
+            l10_ga   = t.get("l10GoalsAgainst", 0)
+
+            streak_code  = t.get("streakCode", "")
+            streak_count = t.get("streakCount", 0)
+
+            result[abbrev] = {
+                "team": abbrev,
+                "games_played": gp,
+                "wins": wins,
+                "losses": losses,
+                "ot": ot,
+                "goals_for": gf,
+                "goals_against": ga,
+                "win_rate":           wins / gp,
+                "goals_for_avg":      gf / gp,
+                "goals_against_avg":  ga / gp,
+                "home_win_rate":      h_wins / h_gp,
+                "home_gf_avg":        h_gf / h_gp,
+                "home_ga_avg":        h_ga / h_gp,
+                "away_win_rate":      r_wins / r_gp,
+                "away_gf_avg":        r_gf / r_gp,
+                "away_ga_avg":        r_ga / r_gp,
+                "l10_gp":             l10_gp,
+                "l10_wins":           l10_wins,
+                "l10_win_rate":       l10_wins / l10_gp,
+                "l10_gf_avg":         l10_gf / l10_gp,
+                "l10_ga_avg":         l10_ga / l10_gp,
+                "reg_win_rate":       reg_w / gp,
+                "shootout_wins":      so_w,
+                "form":               l10_wins / l10_gp,
+                "streak_code":        streak_code,
+                "streak_count":       streak_count,
+                "powerplay_pct":      20,
+                "penalty_kill_pct":   80,
+                "save_pct":           0.910,
+            }
+        return result
+
     def _load_standings(self) -> Dict[str, Dict]:
-        """Fetch all team standings in one API call and cache by abbrev."""
+        """Fetch current standings (cached for this session)."""
         if hasattr(self, '_standings_cache') and self._standings_cache:
             return self._standings_cache
         try:
             url = f"{self.BASE_URL}/v1/standings/now"
             resp = self.session.get(url, timeout=8)
             if resp.status_code == 200:
-                cache = {}
-                for t in resp.json().get("standings", []):
-                    abbrev_raw = t.get("teamAbbrev", {})
-                    abbrev = abbrev_raw.get("default", "") if isinstance(abbrev_raw, dict) else str(abbrev_raw)
-                    if not abbrev:
-                        continue
-                    gp      = max(1, t.get("gamesPlayed", 1))
-                    wins    = t.get("wins", 0)
-                    losses  = t.get("losses", 0)
-                    ot      = t.get("otLosses", 0)
-                    gf      = t.get("goalFor", 0)
-                    ga      = t.get("goalAgainst", 0)
-                    reg_w   = t.get("regulationWins", wins)
-                    so_w    = t.get("shootoutWins", 0)
-
-                    # Home splits
-                    h_gp   = max(1, t.get("homeGamesPlayed", gp // 2))
-                    h_wins = t.get("homeWins", 0)
-                    h_gf   = t.get("homeGoalsFor", 0)
-                    h_ga   = t.get("homeGoalsAgainst", 0)
-
-                    # Road splits
-                    r_gp   = max(1, t.get("roadGamesPlayed", gp // 2))
-                    r_wins = t.get("roadWins", 0)
-                    r_gf   = t.get("roadGoalsFor", 0)
-                    r_ga   = t.get("roadGoalsAgainst", 0)
-
-                    # Last 10
-                    l10_gp   = max(1, t.get("l10GamesPlayed", 10))
-                    l10_wins = t.get("l10Wins", 0)
-                    l10_gf   = t.get("l10GoalsFor", 0)
-                    l10_ga   = t.get("l10GoalsAgainst", 0)
-
-                    # Streak
-                    streak_code  = t.get("streakCode", "")
-                    streak_count = t.get("streakCount", 0)
-
-                    cache[abbrev] = {
-                        "team": abbrev,
-                        "games_played": gp,
-                        "wins": wins,
-                        "losses": losses,
-                        "ot": ot,
-                        "goals_for": gf,
-                        "goals_against": ga,
-                        # Per-game averages
-                        "win_rate":           wins / gp,
-                        "goals_for_avg":      gf / gp,
-                        "goals_against_avg":  ga / gp,
-                        # True home/road splits
-                        "home_win_rate":      h_wins / h_gp,
-                        "home_gf_avg":        h_gf / h_gp,
-                        "home_ga_avg":        h_ga / h_gp,
-                        "away_win_rate":      r_wins / r_gp,
-                        "away_gf_avg":        r_gf / r_gp,
-                        "away_ga_avg":        r_ga / r_gp,
-                        # Last 10 games
-                        "l10_gp":             l10_gp,
-                        "l10_wins":           l10_wins,
-                        "l10_win_rate":       l10_wins / l10_gp,
-                        "l10_gf_avg":         l10_gf / l10_gp,
-                        "l10_ga_avg":         l10_ga / l10_gp,
-                        # Quality metrics
-                        "reg_win_rate":       reg_w / gp,
-                        "shootout_wins":      so_w,
-                        # Blended form (used by agents directly)
-                        "form": l10_wins / l10_gp,
-                        # Streak
-                        "streak_code":        streak_code,
-                        "streak_count":       streak_count,
-                        # Placeholder special teams
-                        "powerplay_pct":      20,
-                        "penalty_kill_pct":   80,
-                        "save_pct":           0.910,
-                    }
-                self._standings_cache = cache
-                return cache
+                self._standings_cache = self._parse_standings_response(resp.json())
+                return self._standings_cache
         except Exception as e:
             print(f"Standings API error: {e}")
         self._standings_cache = {}

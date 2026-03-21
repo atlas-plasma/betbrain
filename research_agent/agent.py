@@ -15,11 +15,21 @@ class ResearchAgent:
         self.session.headers.update({
             "User-Agent": "BetBrain/1.0"
         })
+        self.news_api_key = None
+        try:
+            from dotenv import load_dotenv
+            import os
+            load_dotenv()
+            self.news_api_key = os.getenv("NEWSAPI_KEY")
+        except Exception:
+            self.news_api_key = None
     
     def get_team_news(self, team: str) -> Dict:
         """Get recent news for a team."""
-        # Would use web search in production
-        # For now, return mock data
+        if self.news_api_key:
+            return self._get_newsapi_team_info(team)
+
+        # Fallback mock data
         return {
             "team": team,
             "injuries": [],
@@ -27,6 +37,48 @@ class ResearchAgent:
             "news": [],
             "last_updated": datetime.now().isoformat()
         }
+
+    def _get_newsapi_team_info(self, team: str) -> Dict:
+        """Fetch from NewsAPI and parse for injuries + sentiment."""
+        url = "https://newsapi.org/v2/everything"
+        params = {
+            "q": f"{team} injury nhl",
+            "language": "en",
+            "pageSize": 5,
+            "apiKey": self.news_api_key,
+        }
+
+        try:
+            r = self.session.get(url, params=params, timeout=8)
+            r.raise_for_status()
+            data = r.json()
+
+            articles = [
+                {"title": item.get("title"), "url": item.get("url")}
+                for item in data.get("articles", [])
+            ]
+
+            injuries = []
+            for art in articles:
+                if "injury" in (art.get("title") or "").lower():
+                    injuries.append({"impact": 2, "source": art.get("url")})
+
+            return {
+                "team": team,
+                "injuries": injuries,
+                "form": "neutral",
+                "news": articles,
+                "last_updated": datetime.now().isoformat()
+            }
+        except Exception as e:
+            return {
+                "team": team,
+                "injuries": [],
+                "form": "neutral",
+                "news": [],
+                "last_updated": datetime.now().isoformat(),
+                "error": str(e)
+            }
     
     def get_injury_report(self, team: str) -> List[Dict]:
         """Get injury report for team."""

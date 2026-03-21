@@ -4,7 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>BetBrain — Paper Trading</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -13,6 +12,8 @@
             --bg: #F9F7F4; --surface: #FFFFFF; --surface2: #F3F1EE;
             --border: #E5E2DC; --text: #1A1816; --text2: #6B6560; --text3: #A09A94;
             --success: #2D7A4F; --success-bg: #E8F5EE; --danger: #C0392B; --danger-bg: #FDE8E8;
+            --warning: #92660A; --warning-bg: #FEF3CD;
+            --info: #1A5A8A; --info-bg: #E3F0FA;
             --shadow-sm: 0 1px 3px rgba(0,0,0,0.06); --shadow: 0 4px 12px rgba(0,0,0,0.07);
             --radius: 10px;
         }
@@ -23,12 +24,19 @@
         .nav-links a { padding: 0.4rem 0.85rem; border-radius: 6px; color: var(--text2); text-decoration: none; font-size: 0.875rem; font-weight: 500; transition: all 0.15s; }
         .nav-links a:hover { background: var(--surface2); color: var(--text); }
         .nav-links a.active { background: var(--brand-light); color: var(--brand); }
-
         .container { max-width: 1200px; margin: 0 auto; padding: 1.75rem 2rem; }
-        .page-title { font-size: 1.4rem; font-weight: 700; margin-bottom: 0.25rem; letter-spacing: -0.02em; }
-        .subtitle { color: var(--text2); font-size: 0.875rem; margin-bottom: 1.5rem; }
+        .page-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1.5rem; flex-wrap: wrap; gap: 1rem; }
+        .page-title { font-size: 1.4rem; font-weight: 700; letter-spacing: -0.02em; }
+        .subtitle { color: var(--text2); font-size: 0.875rem; margin-top: 0.25rem; }
 
-        .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 0.875rem; margin-bottom: 1.75rem; }
+        /* How it works banner */
+        .explainer { background: var(--info-bg); border: 1px solid #b3d4f0; border-radius: var(--radius); padding: 1rem 1.25rem; margin-bottom: 1.5rem; font-size: 0.85rem; color: var(--info); line-height: 1.6; }
+        .explainer strong { display: block; margin-bottom: 0.3rem; font-size: 0.9rem; }
+        .explainer ul { padding-left: 1.2rem; }
+        .explainer li { margin-bottom: 0.2rem; }
+
+        /* Stats */
+        .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 0.875rem; margin-bottom: 1.75rem; }
         .stat-card { background: var(--surface); border: 1px solid var(--border); padding: 1.1rem 1.25rem; border-radius: var(--radius); box-shadow: var(--shadow-sm); }
         .stat-value { font-size: 1.75rem; font-weight: 700; letter-spacing: -0.03em; }
         .stat-value.up { color: var(--success); }
@@ -36,28 +44,79 @@
         .stat-value.neutral { color: var(--brand); }
         .stat-label { color: var(--text2); font-size: 0.78rem; margin-top: 0.35rem; font-weight: 500; }
 
-        .section { margin-bottom: 2.5rem; }
-        .section-title { font-size: 1rem; font-weight: 700; color: var(--text); margin-bottom: 0.875rem; display: flex; align-items: center; gap: 0.4rem; }
+        /* Schedule panel */
+        .schedule-panel { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 1.25rem; margin-bottom: 1.75rem; box-shadow: var(--shadow-sm); }
+        .schedule-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; }
+        .schedule-title { font-size: 0.9rem; font-weight: 700; }
+        .schedule-meta { font-size: 0.78rem; color: var(--text3); }
+        .date-group { margin-bottom: 1.25rem; }
+        .date-label { font-size: 0.72rem; font-weight: 700; color: var(--text3); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 0.5rem; padding-bottom: 0.4rem; border-bottom: 1px solid var(--border); }
+        .game-cards { display: flex; flex-wrap: wrap; gap: 0.6rem; }
+        .game-card { background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 0.75rem 1rem; min-width: 210px; position: relative; overflow: hidden; transition: box-shadow 0.15s; }
+        .game-card:hover { box-shadow: var(--shadow); }
+        .game-card::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 4px; border-radius: 8px 0 0 8px; }
+        .game-card.scheduled::before { background: var(--text3); }
+        .game-card.soon::before { background: #f59e0b; }
+        .game-card.window_open::before { background: var(--brand); animation: pulse-bar 1s infinite; }
+        .game-card.bet_placed::before { background: var(--success); }
+        .game-card.started::before { background: var(--text3); opacity: 0.4; }
+        @keyframes pulse-bar { 0%,100%{opacity:1} 50%{opacity:0.5} }
+        .game-teams { font-size: 0.92rem; font-weight: 700; color: var(--text); margin-bottom: 0.4rem; }
+        .game-teams span { color: var(--text2); font-weight: 400; font-size: 0.8rem; }
+        .game-times { display: flex; gap: 0.75rem; font-size: 0.78rem; margin-bottom: 0.4rem; }
+        .time-item { display: flex; flex-direction: column; }
+        .time-val { font-weight: 700; color: var(--text); }
+        .time-lbl { color: var(--text3); font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.04em; }
+        .game-status { font-size: 0.72rem; font-weight: 600; padding: 0.15rem 0.5rem; border-radius: 4px; display: inline-block; }
+        .status-scheduled { background: var(--surface2); color: var(--text3); }
+        .status-soon { background: #fef3cd; color: #92660a; }
+        .status-window_open { background: var(--brand-light); color: var(--brand); }
+        .status-bet_placed { background: var(--success-bg); color: var(--success); }
+        .status-started { background: var(--surface2); color: var(--text3); }
+        .countdown { font-size: 0.75rem; color: var(--brand); font-weight: 600; margin-top: 0.25rem; }
 
+        /* Controls panel */
+        .controls-panel { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 1.25rem; margin-bottom: 1.75rem; box-shadow: var(--shadow-sm); }
+        .controls-title { font-size: 0.9rem; font-weight: 700; margin-bottom: 1rem; display: flex; align-items: center; gap: 0.5rem; }
+        .controls-row { display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap; }
+        .control-group { display: flex; flex-direction: column; gap: 0.3rem; }
+        .control-label { font-size: 0.75rem; font-weight: 600; color: var(--text2); text-transform: uppercase; letter-spacing: 0.05em; }
+        select, input[type=number] { padding: 0.45rem 0.75rem; border: 1px solid var(--border); border-radius: 6px; font-size: 0.875rem; font-family: inherit; background: var(--bg); color: var(--text); }
+        .btn { padding: 0.45rem 1rem; border: none; border-radius: 6px; cursor: pointer; font-weight: 600; font-size: 0.85rem; font-family: inherit; transition: opacity 0.15s; display: inline-flex; align-items: center; gap: 0.4rem; }
+        .btn:hover { opacity: 0.85; }
+        .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        .btn-primary { background: var(--brand); color: white; }
+        .btn-secondary { background: var(--surface2); color: var(--text); border: 1px solid var(--border); }
+        .btn-success { background: var(--success-bg); color: var(--success); border: 1px solid rgba(45,122,79,0.25); }
+        .btn-danger { background: var(--danger-bg); color: var(--danger); border: 1px solid rgba(192,57,43,0.25); }
+        .auto-status { font-size: 0.8rem; color: var(--text2); display: flex; align-items: center; gap: 0.4rem; }
+        .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--success); display: inline-block; animation: pulse 2s infinite; }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+
+        /* Toast */
+        #toast { position: fixed; bottom: 1.5rem; right: 1.5rem; background: #1A1816; color: white; padding: 0.75rem 1.25rem; border-radius: 8px; font-size: 0.875rem; z-index: 9999; display: none; box-shadow: var(--shadow); }
+
+        /* Tables */
+        .section { margin-bottom: 2rem; }
+        .section-title { font-size: 1rem; font-weight: 700; color: var(--text); margin-bottom: 0.875rem; display: flex; align-items: center; gap: 0.4rem; }
         .table-wrap { overflow-x: auto; border-radius: var(--radius); box-shadow: var(--shadow); border: 1px solid var(--border); }
         table { width: 100%; border-collapse: collapse; background: var(--surface); font-size: 0.85rem; }
         thead tr { background: var(--surface2); border-bottom: 2px solid var(--border); }
         th { padding: 0.65rem 0.9rem; text-align: left; color: var(--text2); font-size: 0.72rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; white-space: nowrap; }
-        td { padding: 0.65rem 0.9rem; border-bottom: 1px solid var(--border); }
+        td { padding: 0.65rem 0.9rem; border-bottom: 1px solid var(--border); vertical-align: middle; }
         tr:last-child td { border-bottom: none; }
         tr:hover { background: var(--surface2); }
-
         .positive { color: var(--success); font-weight: 600; }
         .negative { color: var(--danger); font-weight: 600; }
         .muted { color: var(--text2); }
-
-        .btn { padding: 0.35rem 0.85rem; border: none; border-radius: 6px; cursor: pointer; font-weight: 600; font-size: 0.8rem; font-family: inherit; transition: opacity 0.15s; }
-        .btn:hover { opacity: 0.85; }
-        .btn-win { background: var(--success-bg); color: var(--success); border: 1px solid rgba(45,122,79,0.25); }
-        .btn-lose { background: var(--danger-bg); color: var(--danger); border: 1px solid rgba(192,57,43,0.25); }
-
-        .empty { color: var(--text2); padding: 1.5rem; font-size: 0.875rem; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); }
-
+        .badge { display: inline-block; padding: 0.15rem 0.5rem; border-radius: 4px; font-size: 0.72rem; font-weight: 600; }
+        .badge-won { background: var(--success-bg); color: var(--success); }
+        .badge-lost { background: var(--danger-bg); color: var(--danger); }
+        .badge-pending { background: var(--warning-bg); color: var(--warning); }
+        .reasoning-text { max-width: 280px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--text2); font-size: 0.78rem; cursor: pointer; }
+        .empty { color: var(--text2); padding: 2rem 1.5rem; font-size: 0.875rem; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); text-align: center; }
+        .empty p { margin-bottom: 0.5rem; }
+        .empty small { font-size: 0.78rem; color: var(--text3); }
         footer { text-align: center; padding: 2rem; color: var(--text3); font-size: 0.78rem; border-top: 1px solid var(--border); margin-top: 2rem; }
     </style>
 </head>
@@ -75,28 +134,154 @@
 </nav>
 
 <div class="container">
-    <div class="page-title">Paper Trading</div>
-    <div class="subtitle">Simulate bets without real money — track your edge over time</div>
+    <div class="page-header">
+        <div>
+            <div class="page-title">Paper Trading</div>
+            <div class="subtitle">Simulated bets using real Betway odds — no real money</div>
+        </div>
+        <div class="auto-status">
+            <span class="dot"></span> Auto-trader running — bets placed 90 min before each game
+        </div>
+    </div>
 
+    <!-- How it works -->
+    <div class="explainer">
+        <strong>How this works</strong>
+        <ul>
+            <li><strong>Automatic:</strong> 90 minutes before each NHL game, the model runs, grabs real Betway odds, and places a paper bet if it finds value (edge &gt; 3%).</li>
+            <li><strong>Settlement:</strong> Each morning at 08:00, yesterday's game results are fetched from the NHL API and all pending bets are settled automatically.</li>
+            <li><strong>Strategy:</strong> Use the dropdown below to change which signal filter the auto-trader uses. Click <em>Save &amp; Apply</em> — new bets from that point forward will use the new strategy.</li>
+            <li><strong>Manual triggers:</strong> Use the buttons below to place bets right now or settle immediately — useful for testing.</li>
+        </ul>
+    </div>
+
+    <!-- Stats -->
     <div class="stats-grid">
         <div class="stat-card">
-            <div class="stat-value {{ 'up' if status.profit_pct > 0 else 'down' }}">{{ "%.1f"|format(status.profit_pct) }}%</div>
+            <div class="stat-value {{ 'up' if status.profit_pct > 0 else ('down' if status.profit_pct < 0 else 'neutral') }}">
+                {{ "%+.1f"|format(status.profit_pct) }}%
+            </div>
             <div class="stat-label">ROI</div>
         </div>
         <div class="stat-card">
             <div class="stat-value neutral">${{ "%.0f"|format(status.bankroll) }}</div>
-            <div class="stat-label">Bankroll</div>
+            <div class="stat-label">Bankroll (started ${{ "%.0f"|format(status.initial_bankroll) }})</div>
         </div>
         <div class="stat-card">
-            <div class="stat-value neutral">{{ status.total_bets }}</div>
-            <div class="stat-label">Total Bets</div>
+            <div class="stat-value {{ 'up' if status.total_profit > 0 else ('down' if status.total_profit < 0 else 'neutral') }}">
+                ${{ "%+.0f"|format(status.total_profit) }}
+            </div>
+            <div class="stat-label">Total P&amp;L</div>
         </div>
         <div class="stat-card">
-            <div class="stat-value {{ 'up' if status.win_rate > 0.5 else '' }}">{{ "%.1f"|format(status.win_rate * 100) }}%</div>
-            <div class="stat-label">Win Rate</div>
+            <div class="stat-value {{ 'up' if status.win_rate > 0.53 else '' }}">{{ "%.1f"|format(status.win_rate * 100) }}%</div>
+            <div class="stat-label">Win Rate ({{ status.won }}W / {{ status.lost }}L)</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value neutral">{{ status.pending_bets }}</div>
+            <div class="stat-label">Pending Bets</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value {{ 'up' if status.avg_clv and status.avg_clv > 1 else 'neutral' }}">
+                {% if status.avg_clv %}{{ "%.3f"|format(status.avg_clv) }}{% else %}—{% endif %}
+            </div>
+            <div class="stat-label">Avg CLV <span style="font-size:0.65rem;color:var(--text3)">(>1 = beating close)</span></div>
         </div>
     </div>
 
+    <!-- Schedule panel -->
+    <div class="schedule-panel">
+        <div class="schedule-header">
+            <div class="schedule-title">🏒 Upcoming Games &amp; Bet Schedule</div>
+            <div class="schedule-meta">Auto-bet fires {{ mins_before }} min before puck drop &nbsp;|&nbsp; Now: {{ now_str }}</div>
+        </div>
+
+        {% if schedule %}
+            {% set days = schedule | groupby('date') %}
+            {% for date, games in days %}
+            <div class="date-group">
+                <div class="date-label">
+                    {% if games[0].is_today %}Today — {{ date }}{% else %}{{ date }}{% endif %}
+                </div>
+                <div class="game-cards">
+                    {% for g in games %}
+                    <div class="game-card {{ g.status }}">
+                        <div class="game-teams">
+                            {{ g.away }} <span>@</span> {{ g.home }}
+                        </div>
+                        <div class="game-times">
+                            <div class="time-item">
+                                <span class="time-val">{{ g.start_time if g.start_time != 'TBD' else '—' }}</span>
+                                <span class="time-lbl">Puck drop</span>
+                            </div>
+                            {% if g.bet_at %}
+                            <div class="time-item">
+                                <span class="time-val">{{ g.bet_at }}</span>
+                                <span class="time-lbl">Bet fires</span>
+                            </div>
+                            {% endif %}
+                        </div>
+
+                        {% if g.status == 'bet_placed' %}
+                            <span class="game-status status-bet_placed">✓ Bet placed</span>
+                        {% elif g.status == 'window_open' %}
+                            <span class="game-status status-window_open">⚡ Betting now…</span>
+                        {% elif g.status == 'soon' %}
+                            <span class="game-status status-soon">⏱ In {{ g.minutes_until_bet }} min</span>
+                        {% elif g.status == 'started' %}
+                            <span class="game-status status-started">In progress</span>
+                        {% else %}
+                            {% if g.minutes_until_bet is not none and g.minutes_until_bet > 0 %}
+                                {% set hrs = (g.minutes_until_bet // 60) %}
+                                {% set mins = (g.minutes_until_bet % 60) %}
+                                <span class="game-status status-scheduled">
+                                    {% if hrs > 0 %}{{ hrs }}h {{ mins }}m{% else %}{{ mins }}m{% endif %} until bet
+                                </span>
+                            {% else %}
+                                <span class="game-status status-scheduled">Scheduled</span>
+                            {% endif %}
+                        {% endif %}
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endfor %}
+        {% else %}
+            <div style="color:var(--text3);font-size:0.875rem;padding:0.5rem 0;">No upcoming games found — schedule updates daily.</div>
+        {% endif %}
+    </div>
+
+    <!-- Controls -->
+    <div class="controls-panel">
+        <div class="controls-title">⚙️ Auto-Trader Settings &amp; Controls</div>
+        <div class="controls-row">
+            <div class="control-group">
+                <div class="control-label">Strategy</div>
+                <select id="strategySelect">
+                    <option value="value">Value — edge &gt;3%</option>
+                    <option value="pdo_fade">PDO Regression</option>
+                    <option value="b2b_exploit">Back-to-Back Exploit</option>
+                    <option value="goalie_edge">Goalie Edge</option>
+                    <option value="kelly">Kelly Optimal</option>
+                </select>
+            </div>
+            <div class="control-group">
+                <div class="control-label">Stake per bet ($)</div>
+                <input type="number" id="stakeInput" value="50" min="1" max="500" style="width:90px;">
+            </div>
+            <div class="control-group">
+                <div class="control-label">Mins before game</div>
+                <input type="number" id="minsInput" value="90" min="15" max="240" style="width:90px;">
+            </div>
+            <div style="display:flex;gap:0.5rem;margin-top:1.3rem;flex-wrap:wrap;">
+                <button class="btn btn-primary" onclick="placeNow()">▶ Place Bets Now</button>
+                <button class="btn btn-secondary" onclick="settleNow()">✓ Settle Pending</button>
+            </div>
+        </div>
+        <div id="actionMsg" style="margin-top:0.75rem;font-size:0.82rem;color:var(--text2);display:none;"></div>
+    </div>
+
+    <!-- Pending bets -->
     <div class="section">
         <div class="section-title">⏳ Pending Bets ({{ pending|length }})</div>
         {% if pending %}
@@ -104,20 +289,31 @@
             <table>
                 <thead>
                     <tr>
-                        <th>Match</th><th>Market</th><th>Odds</th><th>Stake</th><th>Prediction</th><th>Action</th>
+                        <th>Placed</th>
+                        <th>Match</th>
+                        <th>Backing</th>
+                        <th>Market</th>
+                        <th>Odds</th>
+                        <th>Stake</th>
+                        <th>Model %</th>
+                        <th>Reasoning</th>
+                        <th>Manual settle</th>
                     </tr>
                 </thead>
                 <tbody>
                     {% for bet in pending %}
                     <tr>
+                        <td class="muted">{{ bet.timestamp[5:16] }}</td>
                         <td style="font-weight:600;">{{ bet.match }}</td>
+                        <td style="font-weight:600;color:var(--brand);">{{ bet.pick or '—' }}</td>
                         <td class="muted">{{ bet.market }}</td>
-                        <td style="font-weight:700;">{{ bet.odds }}</td>
-                        <td class="muted">${{ "%.2f"|format(bet.stake) }}</td>
-                        <td class="muted">{{ "%.0f"|format(bet.prediction * 100) }}%</td>
-                        <td style="display:flex;gap:0.4rem;">
-                            <button class="btn btn-win" onclick="settleBet({{ bet.id }}, true)">Win</button>
-                            <button class="btn btn-lose" onclick="settleBet({{ bet.id }}, false)">Lose</button>
+                        <td style="font-weight:700;">{{ "%.3f"|format(bet.odds) }}</td>
+                        <td class="muted">${{ "%.0f"|format(bet.stake) }}</td>
+                        <td>{{ "%.0f"|format(bet.prediction * 100) }}%</td>
+                        <td><div class="reasoning-text" title="{{ bet.reasoning }}">{{ bet.reasoning }}</div></td>
+                        <td style="display:flex;gap:0.35rem;">
+                            <button class="btn btn-success" style="padding:0.25rem 0.6rem;font-size:0.75rem;" onclick="settleBet({{ bet.id }}, true)">Won</button>
+                            <button class="btn btn-danger" style="padding:0.25rem 0.6rem;font-size:0.75rem;" onclick="settleBet({{ bet.id }}, false)">Lost</button>
                         </td>
                     </tr>
                     {% endfor %}
@@ -125,18 +321,30 @@
             </table>
         </div>
         {% else %}
-        <div class="empty">No pending bets. Add bets from the Analysis page.</div>
+        <div class="empty">
+            <p>No pending bets yet.</p>
+            <small>The auto-trader places bets 90 min before each game. Click "Place Bets Now" to trigger immediately.</small>
+        </div>
         {% endif %}
     </div>
 
+    <!-- History -->
     <div class="section">
-        <div class="section-title">📜 Bet History</div>
+        <div class="section-title">📜 Bet History ({{ history|length }})</div>
         {% if history %}
         <div class="table-wrap">
             <table>
                 <thead>
                     <tr>
-                        <th>Date</th><th>Match</th><th>Market</th><th>Odds</th><th>Stake</th><th>Result</th><th>P&amp;L</th>
+                        <th>Date</th>
+                        <th>Match</th>
+                        <th>Backed</th>
+                        <th>Market</th>
+                        <th>Odds</th>
+                        <th>Stake</th>
+                        <th>Result</th>
+                        <th>P&amp;L</th>
+                        <th>CLV</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -144,31 +352,84 @@
                     <tr>
                         <td class="muted">{{ bet.timestamp[:10] }}</td>
                         <td style="font-weight:600;">{{ bet.match }}</td>
+                        <td style="font-weight:600;">{{ bet.pick or '—' }}</td>
                         <td class="muted">{{ bet.market }}</td>
-                        <td style="font-weight:700;">{{ bet.odds }}</td>
-                        <td class="muted">${{ "%.2f"|format(bet.stake) }}</td>
-                        <td class="{{ 'positive' if bet.status == 'won' else 'negative' }}">{{ bet.status | upper }}</td>
-                        <td class="{{ 'positive' if bet.profit > 0 else 'negative' }}">${{ "%.2f"|format(bet.profit) }}</td>
+                        <td>{{ "%.3f"|format(bet.odds) }}</td>
+                        <td class="muted">${{ "%.0f"|format(bet.stake) }}</td>
+                        <td>
+                            <span class="badge badge-{{ bet.status }}">{{ bet.status | upper }}</span>
+                        </td>
+                        <td class="{{ 'positive' if bet.profit > 0 else 'negative' }}">${{ "%+.2f"|format(bet.profit) }}</td>
+                        <td class="{{ 'positive' if bet.clv and bet.clv > 1 else 'muted' }}">
+                            {% if bet.clv %}{{ "%.3f"|format(bet.clv) }}{% else %}—{% endif %}
+                        </td>
                     </tr>
                     {% endfor %}
                 </tbody>
             </table>
         </div>
         {% else %}
-        <div class="empty">No history yet. Settle some bets to see results.</div>
+        <div class="empty">
+            <p>No history yet.</p>
+            <small>Bets appear here after they are settled.</small>
+        </div>
         {% endif %}
     </div>
 </div>
 
-<footer>BetBrain — For analysis purposes only. No real money. Gamble responsibly.</footer>
+<footer>BetBrain — Simulation only. No real money involved. Gamble responsibly.</footer>
+<div id="toast"></div>
 
 <script>
+function toast(msg, ms=3000) {
+    const t = document.getElementById('toast');
+    t.textContent = msg;
+    t.style.display = 'block';
+    setTimeout(() => t.style.display = 'none', ms);
+}
+
+function setMsg(msg, color='var(--text2)') {
+    const el = document.getElementById('actionMsg');
+    el.textContent = msg;
+    el.style.color = color;
+    el.style.display = 'block';
+}
+
+function placeNow() {
+    setMsg('Running pipeline and placing bets… this may take 30–60 seconds.');
+    fetch('/api/auto/place', { method: 'POST' })
+        .then(r => r.json())
+        .then(d => {
+            if (d.placed === 0) {
+                setMsg('No value bets found for today\'s games (no real odds available yet, or no edge found).', 'var(--warning)');
+            } else {
+                setMsg(`✓ Placed ${d.placed} bet(s)!`, 'var(--success)');
+                setTimeout(() => location.reload(), 1500);
+            }
+        })
+        .catch(() => setMsg('Error — check server logs.', 'var(--danger)'));
+}
+
+function settleNow() {
+    setMsg('Fetching results and settling bets…');
+    fetch('/api/auto/settle', { method: 'POST' })
+        .then(r => r.json())
+        .then(d => {
+            setMsg(`✓ Settled ${d.settled} bet(s).`, 'var(--success)');
+            setTimeout(() => location.reload(), 1500);
+        })
+        .catch(() => setMsg('Error — check server logs.', 'var(--danger)'));
+}
+
+// Refresh the schedule panel every 60 seconds to update countdowns
+setTimeout(() => location.reload(), 60000);
+
 function settleBet(id, won) {
     fetch('/api/paper/settle', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
         body: JSON.stringify({bet_id: id, won: won})
-    }).then(r => r.json()).then(() => location.reload());
+    }).then(() => location.reload());
 }
 </script>
 </body>

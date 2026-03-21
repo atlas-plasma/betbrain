@@ -18,21 +18,35 @@ class OddsAPIFetcher:
     def has_api(self) -> bool:
         return bool(self.api_key)
 
-    def get_market_odds(self, sport: str = "icehockey_nhl", region: str = "us", market: str = "h2h", date_format: str = "iso") -> List[Dict]:
+    # Bookmakers to prefer, in order. Betway first, then common sharp books.
+    # TheOddsAPI key names: https://the-odds-api.com/sports-odds-data/bookmaker-apis.html
+    PREFERRED_BOOKS = ["betway", "bet365", "unibet", "paddypower", "williamhill",
+                       "draftkings", "fanduel", "betmgm", "bovada"]
+
+    def get_market_odds(self, sport: str = "icehockey_nhl",
+                        regions: str = "uk,eu,us",
+                        markets: str = "h2h,totals") -> List[Dict]:
+        """Fetch live odds for all upcoming NHL games.
+
+        Tries UK region first (where Betway lives), then EU and US as fallback.
+        Returns raw TheOddsAPI game list with bookmaker odds attached.
+        """
         if not self.has_api():
-            raise RuntimeError("Odds API key is not configured")
+            raise RuntimeError("ODDS_API_KEY not set")
 
         url = f"{self.BASE_URL}/{sport}/odds"
         params = {
-            "apiKey": self.api_key,
-            "regions": region,
-            "markets": market,
-            "oddsFormat": "decimal",
-            "dateFormat": date_format,
+            "apiKey":      self.api_key,
+            "regions":     regions,
+            "markets":     markets,
+            "oddsFormat":  "decimal",
+            "dateFormat":  "iso",
         }
 
         resp = self.session.get(url, params=params, timeout=10)
         resp.raise_for_status()
+        remaining = resp.headers.get("x-requests-remaining", "?")
+        print(f"  [odds] TheOddsAPI — {remaining} requests remaining this month")
         return resp.json()
 
     def get_best_game_odds(self, home: str, away: str, game_date: str = None) -> Dict:
@@ -70,16 +84,52 @@ class OddsAPIFetcher:
         except Exception:
             return {"source": "error"}
 
-    def get_fallback_odds(self, home_strength: float, away_strength: float) -> Dict:
-        """Deterministic odds based on relative strength when API is unavailable."""
-        spread = max(0.02, min(0.45, home_strength - away_strength))
-        home_price = round(1 / ((0.5 + spread) * 0.95), 2)
-        away_price = round(1 / ((0.5 - spread) * 0.95), 2)
+    def get_fallback_odds(self, home_stats: Dict, away_stats: Dict) -> Dict:
+        """
+        Synthetic odds that mirror what a sharp bookmaker would set.
+
+        Uses Pythagorean win expectation (GF²/GF²+GA²) as the base —
+        the same signal real oddsmakers use — then adds the empirical NHL
+        home-ice advantage and applies a 5% vig.
+
+        This means the model must find genuine additional edge (from PDO,
+        goalie quality, B2B, etc.) over and above what Pythagorean + home
+        advantage already predicts. Without this, the backtest rewards the
+        model for discovering home advantage, which is trivially known.
+        """
+        NHL_HOME_WIN_RATE = 0.548   # empirical NHL home advantage
+
+        def pyth_win(gf: float, ga: float) -> float:
+            return (gf ** 2) / max(1e-6, gf ** 2 + ga ** 2)
+
+        h_gf = home_stats.get("full_gf", home_stats.get("goals_for_avg", 3.0))
+        h_ga = home_stats.get("full_ga", home_stats.get("goals_against_avg", 3.0))
+        a_gf = away_stats.get("full_gf", away_stats.get("goals_for_avg", 3.0))
+        a_ga = away_stats.get("full_ga", away_stats.get("goals_against_avg", 3.0))
+
+        home_pyth = pyth_win(h_gf, h_ga)
+        away_pyth = pyth_win(a_gf, a_ga)
+
+        # Relative quality: normalise so the two probs sum to 1
+        total = home_pyth + away_pyth
+        home_rel = home_pyth / total if total > 0 else 0.5
+
+        # Shift relative quality by home advantage.
+        # home_rel=0.5 (equal teams) → home_prob = 0.5 + 0.048 = 0.548 ✓
+        # home_rel=0.7 (stronger home) → home_prob = 0.7 + 0.048 = 0.748 ✓
+        HOME_ADV = NHL_HOME_WIN_RATE - 0.5   # = 0.048
+        home_prob = max(0.05, min(0.95, home_rel + HOME_ADV))
+        away_prob = 1.0 - home_prob
+
+        # Apply 5% bookmaker margin: implied probs sum to 1.05
+        MARGIN = 1.05
+        home_price = round(1.0 / (home_prob * MARGIN), 3)
+        away_price = round(1.0 / (away_prob * MARGIN), 3)
 
         return {
             "home_ml": max(1.01, home_price),
             "away_ml": max(1.01, away_price),
-            "over": 1.90,
-            "under": 1.90,
-            "source": "fallback",
+            "over":    1.909,
+            "under":   1.909,
+            "source":  "fallback",
         }

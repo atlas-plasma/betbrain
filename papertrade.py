@@ -37,7 +37,8 @@ class PaperTrader:
             }, f, indent=2)
     
     def place_bet(self, match: str, market: str, odds: float, stake: float,
-                  prediction: float, reasoning: str = "") -> Dict:
+                  prediction: float, reasoning: str = "", pick: str = "",
+                  **kwargs) -> Dict:
         """Place a paper bet.
 
         ``odds`` is recorded as the opening odds.  When settling, pass the
@@ -54,6 +55,7 @@ class PaperTrader:
             "timestamp": datetime.now().isoformat(),
             "match": match,
             "market": market,
+            "pick": pick if (pick := kwargs.get("pick")) else "",
             "opening_odds": odds,   # odds at bet placement
             "odds": odds,
             "stake": stake,

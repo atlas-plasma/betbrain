@@ -63,104 +63,134 @@ class BetBrain:
             ou_analysis = self.strategy.analyze_over_under(home, away, home_stats, away_stats, injuries)
             
             # Get odds
-            odds = self._get_odds(home, away)
+            odds = self._get_odds(home, away, home_stats, away_stats)
             
-            # Calculate edges using our probabilities
-            home_edge = ml_analysis["home_prob"] - (1 / odds["home_ml"])
-            away_edge = ml_analysis["away_prob"] - (1 / odds["away_ml"])
-            over_edge = ou_analysis["over_prob"] - (1 / odds["over"])
-            
-            # Determine recommendations
+            # Devig implied probabilities before computing edge
+            raw_home = 1.0 / odds["home_ml"]
+            raw_away = 1.0 / odds["away_ml"]
+            ml_total = raw_home + raw_away
+            true_implied_home = raw_home / ml_total
+            true_implied_away = raw_away / ml_total
+
+            raw_over = 1.0 / odds["over"]
+            raw_under = 1.0 / odds["under"]
+            ou_total = raw_over + raw_under
+            true_implied_over = raw_over / ou_total
+
+            # Calculate edges against devigged implied probabilities
+            home_edge, home_ev = self.odds_processor.calculate_edge(ml_analysis["home_prob"], true_implied_home, odds["home_ml"])
+            away_edge, away_ev = self.odds_processor.calculate_edge(ml_analysis["away_prob"], true_implied_away, odds["away_ml"])
+            over_edge, over_ev = self.odds_processor.calculate_edge(ou_analysis["over_prob"], true_implied_over, odds["over"])
+
             home_rec = "BET" if home_edge > 0.03 else "SKIP"
             away_rec = "BET" if away_edge > 0.03 else "SKIP"
             over_rec = "BET" if over_edge > 0.03 else "SKIP"
-            
-            # Add opportunities
+
+            pred_total = ou_analysis.get("predicted_total", 5.5)
+            score_pred = ou_analysis.get("score_pred", f"{ou_analysis.get('home_goals', 2.8)} - {ou_analysis.get('away_goals', 2.8)}")
+
+            # Shared fields across all three rows for this game
+            base = {
+                "match": f"{home} vs {away}",
+                "start_time": start_time,
+                "score_pred": score_pred,
+                "pred_total": pred_total,
+                "ou_line": ou_analysis["line"],
+                "over_prob": round(ou_analysis["over_prob"] * 100, 1),
+                "under_prob": round(ou_analysis.get("under_prob", 1 - ou_analysis["over_prob"]) * 100, 1),
+            }
+
             opportunities.extend([
                 {
-                    "match": f"{home} vs {away}",
-                    "start_time": start_time,
+                    **base,
                     "market": "ML (Home)",
                     "win_pick": home,
-                    "goal_pred": round((home_stats.get("goals_for", 2.8) + away_stats.get("goals_against", 2.9)) / 2, 1),
-                    "analysis_notes": ml_analysis.get("reasoning", "")[:100],
-                    "market": "ML (Home)",
                     "odds": odds["home_ml"],
                     "model_prob": ml_analysis["home_prob"],
-                    "implied_prob": 1/odds["home_ml"],
+                    "implied_prob": true_implied_home,
                     "edge": home_edge,
-                    "ev": home_edge * odds["home_ml"],
+                    "ev": home_ev,
                     "recommendation": home_rec,
                     "confidence": ml_analysis["confidence"],
-                    "reasoning": ml_analysis["reasoning"]
+                    "reasoning": ml_analysis["reasoning"],
                 },
                 {
-                    "match": f"{home} vs {away}",
-                    "start_time": start_time,
-                    "win_pick": away,
-                    "goal_pred": round((home_stats.get("goals_for", 2.8) + away_stats.get("goals_against", 2.9)) / 2, 1),
-                    "analysis_notes": ml_analysis.get("reasoning", "")[:100],
+                    **base,
                     "market": "ML (Away)",
+                    "win_pick": away,
                     "odds": odds["away_ml"],
                     "model_prob": ml_analysis["away_prob"],
-                    "implied_prob": 1/odds["away_ml"],
+                    "implied_prob": true_implied_away,
                     "edge": away_edge,
-                    "ev": away_edge * odds["away_ml"],
+                    "ev": away_ev,
                     "recommendation": away_rec,
                     "confidence": ml_analysis["confidence"],
-                    "reasoning": ml_analysis["reasoning"]
+                    "reasoning": ml_analysis["reasoning"],
                 },
                 {
-                    "match": f"{home} vs {away}",
-                    "start_time": start_time,
-                    "win_pick": "UNDER" if ou_analysis.get("under_prob", 0.5) > 0.5 else "OVER",
-                    "goal_pred": round(ou_analysis.get("predicted_total", 5.5), 1),
-                    "analysis_notes": f"Proj: {ou_analysis.get('predicted_total', 'N/A')} goals",
-                    "market": f"Over {ou_analysis['line']}",
+                    **base,
+                    "market": f"O/U {ou_analysis['line']}",
+                    "win_pick": "UNDER" if ou_analysis.get("under_prob", 0.5) > ou_analysis["over_prob"] else "OVER",
                     "odds": odds["over"],
                     "model_prob": ou_analysis["over_prob"],
-                    "implied_prob": 1/odds["over"],
+                    "implied_prob": true_implied_over,
                     "edge": over_edge,
-                    "ev": over_edge * odds["over"],
+                    "ev": over_ev,
                     "recommendation": over_rec,
                     "confidence": ou_analysis["confidence"],
-                    "reasoning": ou_analysis["reasoning"]
+                    "reasoning": ou_analysis["reasoning"],
                 }
             ])
         
         return opportunities
     
-    def _get_odds(self, home: str, away: str) -> dict:
-        """Get realistic odds."""
-        import random
-        return {
-            "home_ml": round(1.5 + random.random() * 1.5, 2),
-            "away_ml": round(1.5 + random.random() * 1.5, 2),
-            "over": 1.90,
-            "under": 1.90
-        }
+    def _get_odds(self, home: str, away: str, home_stats: dict, away_stats: dict) -> dict:
+        """Get odds: real API if available, otherwise strength-based fallback."""
+        from odds.odds_api import OddsAPIFetcher
+        fetcher = OddsAPIFetcher()
+        if fetcher.has_api():
+            try:
+                result = fetcher.get_best_game_odds(home, away)
+                if result.get("source") == "theoddsapi":
+                    return result
+            except Exception:
+                pass
+        home_strength = home_stats.get("win_rate", 0.5)
+        away_strength = away_stats.get("win_rate", 0.5)
+        return fetcher.get_fallback_odds(home_strength, away_strength)
     
     def _get_injuries(self) -> dict:
         """Get injury data using research agent."""
         return self.researcher.get_team_news("NHL")
 
 
+def parse_args():
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Run BetBrain analysis")
+    parser.add_argument("--days", type=int, default=3, help="Days ahead to analyze")
+    parser.add_argument("--strategy", type=str, default="tier_based", choices=["value", "conservative", "aggressive", "tier_based", "model_plus"], help="Strategy for backtesting")
+    parser.add_argument("--min-edge", type=float, default=0.03, help="Min edge threshold for bet recommendation")
+
+    return parser.parse_args()
+
+
 def main():
+    args = parse_args()
     bot = BetBrain()
-    opportunities = bot.analyze(days=3)
-    
-    bets = [o for o in opportunities if o["recommendation"] == "BET"]
-    
+    opportunities = bot.analyze(days=args.days)
+    bets = [o for o in opportunities if o["recommendation"] == "BET" and o["edge"] >= args.min_edge]
+
     print(f"\n🏆 BetBrain - NHL Analysis")
     print(f"📅 {datetime.now().strftime('%Y-%m-%d')}")
     print("=" * 50)
-    
+
     if bets:
         print(f"\n✅ Found {len(bets)} value bets!\n")
         for i, bet in enumerate(bets, 1):
             print(f"{i}. {bet['match']} {bet['market']}")
             print(f"   Odds: {bet['odds']} | Edge: {bet['edge']*100:+.1f}% | EV: {bet['ev']*100:+.1f}%")
-            print(f"   {bet['reasoning']}")
+            print(f"   {bet.get('reasoning', '')}")
     else:
         print("\n❌ No value bets found.")
 

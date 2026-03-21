@@ -1,0 +1,6 @@
+.env
+*.db
+paper_trade_history.json
+__pycache__/
+*.pyc
+.DS_Store
