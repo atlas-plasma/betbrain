@@ -67,6 +67,42 @@ TZ=Africa/Johannesburg       # Timezone (set in docker-compose.yml)
 
 ---
 
+## Agents and how predictions are made
+
+Every game runs through 5 agents. Each agent receives the same inputs: team stats (win rate, goals for/against, L10 form, PDO, back-to-back flag, goalie SV%, Pythagorean win%), the bookmaker O/U line, and the game date. Each agent outputs a ML pick (home/away/skip), a confidence score, an O/U pick, and a reasoning string.
+
+| Agent | What it does |
+|-------|-------------|
+| **Statistical** | Poisson goal model. Calculates attack/defence lambdas from goals scored/allowed. Simulates ~10k games to estimate win probability and expected total. The mathematical backbone. |
+| **ELO** | Maintains ELO ratings for every team, updated after each game result. Converts ELO gap → win probability via a logistic curve. Home advantage = +50 ELO points. |
+| **Form** | Looks at L10 win rate, current win/loss streak, PDO (shooting% + save% × 100 — above 102 means lucky, expect regression), and back-to-back fatigue. Adjusts base win probability up or down. |
+| **ResearchAgent** | Searches DuckDuckGo for injury/lineup news for both teams and hits the ESPN injury API. With `ANTHROPIC_API_KEY` set, uses Claude Haiku to read the text and decide if news is good or bad for each team. Without the key, falls back to keyword heuristics (words like "out", "doubtful", "scratch"). |
+| **ClaudeAgent** | Receives all stats plus the other agents' votes, then writes a narrative reasoning and outputs its own pick. Acts as a tiebreaker and sanity check. Requires `ANTHROPIC_API_KEY`. |
+
+### How the final decision is made
+
+The `ConsensusAggregator` combines all 5 votes using a weighted average:
+
+| Agent | Weight |
+|-------|--------|
+| Statistical | 40% |
+| ResearchAgent | 25% |
+| Form | 20% |
+| ELO | 15% |
+| ClaudeAgent | +20% bonus if it agrees with the majority |
+
+From the weighted home win probability, it then:
+
+1. **Devig** — removes the bookmaker's vig from the raw odds to get the true implied probability
+2. **Edge** = model probability − true implied probability
+3. **Bet threshold**: edge ≥ 3% and consensus confidence ≥ 45%
+4. **Kelly stake**: fractional Kelly (25%) on the edge to size the bet
+5. **Tier**: high (≥60% conf), medium (44–60%), low (<44%)
+
+A bet is only flagged if the model collectively thinks the bookmaker is underpricing the team by at least 3 percentage points and the agents broadly agree on direction.
+
+---
+
 ## Strategies
 
 Strategies are filters on top of the model output. The model always runs the same agents — the strategy just controls which opportunities to act on.
@@ -110,7 +146,7 @@ betbrain/
 ├── cache/
 │   └── backtest_cache.py   # SQLite cache for backtest results
 ├── auto_trade.py           # Automated bet placement and settlement logic
-├── papertrade.py           # PaperTrader class — stores bets in JSON
+├── papertrade.py           # PaperTrader class — stores bets in SQLite (betbrain.db)
 ├── backtest.py             # Backtesting engine
 ├── Dockerfile              # Docker image definition
 └── docker-compose.yml      # Docker Compose with volume and timezone config
