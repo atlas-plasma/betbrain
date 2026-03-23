@@ -26,6 +26,9 @@ from data.historical import HistoricalNHL
 from odds.odds_api import OddsAPIFetcher
 from strategy.selector import StrategySelector
 from agents.statistical import StatisticalAgent
+from agents.elo import ELOAgent
+from agents.form import FormAgent
+from agents.consensus import ConsensusAggregator
 import sqlite3
 import cache.backtest_cache as backtest_cache
 
@@ -87,7 +90,6 @@ class Backtester:
     def __init__(self, strategy: str = "value"):
         self.strategy_name = strategy
         self.selector      = StrategySelector(strategy)
-        self.agent         = StatisticalAgent()
         self.odds_api      = OddsAPIFetcher()
         self.nhl           = NHLDataFetcher()
         self.adv           = NHLAdvancedStats()
@@ -95,7 +97,9 @@ class Backtester:
         # Stats are loaded per game date (point-in-time) — no pre-loading here
         self._date_stats_cache: Dict[str, Dict[str, Dict]] = {}
 
-        self.bankroll = self.INITIAL_BANKROLL
+        self.agents     = [StatisticalAgent(), ELOAgent(), FormAgent()]
+        self.aggregator = ConsensusAggregator()
+        self.bankroll   = self.INITIAL_BANKROLL
 
     def _stats_for_date(self, date: str) -> Dict[str, Dict]:
         """
@@ -190,18 +194,24 @@ class Backtester:
                 away_ml  = fb["away_ml"]
                 ou_odds  = 1.909
                 odds_src = "synthetic"
-            # ----- Model probabilities -----
-            # First pass: get expected lambdas to snap the O/U line
+            # ----- Snap O/U line from Statistical agent lambdas -----
             if not real:
-                vote_preview = self.agent.analyze(home, away, home_stats, away_stats, ou_line=6.5)
-                h_lam = vote_preview.extra.get("home_lambda", 3.0)
-                a_lam = vote_preview.extra.get("away_lambda", 3.0)
+                stat_preview = StatisticalAgent().analyze(home, away, home_stats, away_stats, ou_line=6.5)
+                h_lam = stat_preview.extra.get("home_lambda", 3.0)
+                a_lam = stat_preview.extra.get("away_lambda", 3.0)
                 ou_line = _snap_ou(h_lam + a_lam)
 
-            vote = self.agent.analyze(home, away, home_stats, away_stats, ou_line=ou_line)
-            home_win = vote.home_win_prob
-            away_win = vote.away_win_prob
-            over_p   = vote.over_prob
+            # ----- Multi-agent consensus (same as live pipeline) -----
+            votes = [a.analyze(home, away, home_stats, away_stats, ou_line=ou_line)
+                     for a in self.agents]
+            consensus = self.aggregator.aggregate(
+                home, away, votes,
+                home_ml_odds=home_ml, away_ml_odds=away_ml, ou_odds=ou_odds
+            )
+
+            home_win = consensus.home_win_prob
+            away_win = consensus.away_win_prob
+            over_p   = consensus.over_prob
 
             # ----- Devig -----
             impl_home, impl_away  = _devig(home_ml, away_ml)
@@ -216,7 +226,7 @@ class Backtester:
             base = {
                 "home_team":      home,
                 "away_team":      away,
-                "confidence":     "high" if max(home_win, away_win) > 0.60 else "medium",
+                "confidence":     consensus.tier,
                 "home_pdo":       home_stats.get("pdo", 100),
                 "away_pdo":       away_stats.get("pdo", 100),
                 "home_pdo_label": home_stats.get("pdo_label", "neutral"),
@@ -229,18 +239,18 @@ class Backtester:
 
             home_opp = {**base, "win_pick": home, "market": "Moneyline",
                         "edge": home_edge, "model_prob": home_win,
-                        "kelly": _kelly(home_win, home_ml)}
+                        "kelly": consensus.kelly_ml}
             away_opp = {**base, "win_pick": away, "market": "Moneyline",
                         "edge": away_edge, "model_prob": away_win,
-                        "kelly": _kelly(away_win, away_ml)}
+                        "kelly": consensus.kelly_ml}
             over_opp = {**base, "win_pick": f"Over {ou_line}",
                         "market": f"Over {ou_line}",
                         "edge": over_edge, "model_prob": over_p,
-                        "kelly": _kelly(over_p, ou_odds)}
+                        "kelly": consensus.kelly_ou}
             under_opp = {**base, "win_pick": f"Under {ou_line}",
                          "market": f"Under {ou_line}",
                          "edge": under_edge, "model_prob": 1 - over_p,
-                         "kelly": _kelly(1 - over_p, ou_odds)}
+                         "kelly": consensus.kelly_ou}
 
             # ----- Outcomes -----
             real_home_won = game.get("home_won")

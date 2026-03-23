@@ -140,7 +140,7 @@ def paper_trading():
     schedule_cards = []
     try:
         nhl = NHLDataFetcher()
-        games = nhl.get_schedule(days_forward=5)
+        games = nhl.get_schedule(days_forward=10)
         for g in games:
             gdate = g.get("date", "")
             start_str = g.get("start_time", "TBD")

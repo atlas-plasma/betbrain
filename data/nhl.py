@@ -57,15 +57,18 @@ class NHLDataFetcher:
         }
     
     def get_schedule(self, days_forward: int = 21) -> List[Dict]:
-        """Get upcoming games - uses NHL API v1 (gameWeek structure)."""
+        """Get upcoming games - uses NHL API v1 (gameWeek structure).
+        Fetches current week + next week to cover up to ~14 days ahead."""
 
         try:
-            url = f"{self.BASE_URL}/v1/schedule/now"
-            resp = self.session.get(url, timeout=8)
+            games = []
+            seen_keys = set()
 
-            if resp.status_code == 200:
+            for endpoint in ["/v1/schedule/now", f"/v1/schedule/{(datetime.now() + timedelta(days=7)).strftime('%Y-%m-%d')}"]:
+                resp = self.session.get(f"{self.BASE_URL}{endpoint}", timeout=8)
+                if resp.status_code != 200:
+                    continue
                 data = resp.json()
-                games = []
 
                 for day in data.get("gameWeek", []):
                     day_date = day.get("date", "")
@@ -85,18 +88,24 @@ class NHLDataFetcher:
                             except Exception:
                                 pass
 
+                        home = game.get("homeTeam", {}).get("abbrev")
+                        away = game.get("awayTeam", {}).get("abbrev")
+                        key  = (day_date, home, away)
+                        if key in seen_keys:
+                            continue
+                        seen_keys.add(key)
                         games.append({
                             "date": day_date,
-                            "home_team": game.get("homeTeam", {}).get("abbrev"),
-                            "away_team": game.get("awayTeam", {}).get("abbrev"),
+                            "home_team": home,
+                            "away_team": away,
                             "home_id": game.get("homeTeam", {}).get("id"),
                             "away_id": game.get("awayTeam", {}).get("id"),
                             "start_time": start_time,
                         })
 
-                if games:
-                    games.sort(key=lambda x: x.get("date"))
-                    return games[:days_forward]
+            if games:
+                games.sort(key=lambda x: x.get("date"))
+                return games[:days_forward]
         except Exception as e:
             print(f"Schedule API error: {e}")
 

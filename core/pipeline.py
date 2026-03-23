@@ -24,6 +24,7 @@ from agents.form import FormAgent
 from agents.research import ResearchAgent
 from agents.claude_agent import ClaudeAgent
 from agents.consensus import ConsensusAggregator, INITIAL_BANKROLL
+from cache.odds_store import save_odds
 
 _OU_LINES = [4.5, 5.5, 6.5, 7.5]
 
@@ -123,6 +124,9 @@ class BetBrainPipeline:
                 over_odds  = live.get("over", 1.909)
                 under_odds = live.get("under", 1.909)
                 odds_source = live.get("book") or "theoddsapi"
+                # Persist live odds for future backtesting
+                save_odds(game_date, home, away, home_ml, away_ml, ou_line,
+                          source=f"betway_live")
             else:
                 fb = self.odds_api.get_fallback_odds(home_stats, away_stats)
                 home_ml = fb["home_ml"]

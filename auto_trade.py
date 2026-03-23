@@ -34,6 +34,7 @@ from strategy.selector import StrategySelector
 from papertrade import get_paper_trader
 from data.historical import HistoricalNHL
 from data.nhl import NHLDataFetcher
+from cache.odds_store import settle_game
 
 
 STRATEGY        = os.environ.get("AUTO_STRATEGY", "value")
@@ -211,6 +212,14 @@ def settle_pending_bets() -> List[Dict]:
         print(f"  [settle] {match} | {market} → {outcome} "
               f"(score {game['home_score']}-{game['away_score']})")
         settled.append(result)
+
+        # Persist final score for future backtesting
+        ts = bet.get("timestamp", "")[:10]
+        try:
+            settle_game(ts, game["home_team"], game["away_team"],
+                        int(game["home_score"]), int(game["away_score"]))
+        except Exception:
+            pass
 
     print(f"[auto_trade] Settled {len(settled)} bets")
     return settled
