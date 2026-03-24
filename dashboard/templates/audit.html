@@ -1,0 +1,443 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BetBrain — Audit Log</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+        :root {
+            --brand: #CF4E2E; --brand-light: #F5E6E2; --brand-mid: #E8917D;
+            --bg: #F9F7F4; --surface: #FFFFFF; --surface2: #F3F1EE;
+            --border: #E5E2DC; --text: #1A1816; --text2: #6B6560; --text3: #A09A94;
+            --success: #2D7A4F; --success-bg: #E8F5EE;
+            --danger: #C0392B; --danger-bg: #FDE8E8;
+            --warning: #92660A; --warning-bg: #FEF3CD;
+            --info: #1A5A8A; --info-bg: #E3F0FA;
+            --shadow-sm: 0 1px 3px rgba(0,0,0,0.06); --shadow: 0 4px 12px rgba(0,0,0,0.07);
+            --radius: 10px;
+        }
+        body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; line-height: 1.5; }
+
+        /* Nav */
+        nav { background: var(--surface); border-bottom: 1px solid var(--border); padding: 0 2rem; display: flex; justify-content: space-between; align-items: center; height: 56px; position: sticky; top: 0; z-index: 100; box-shadow: var(--shadow-sm); }
+        .logo { font-size: 1.1rem; font-weight: 700; color: var(--brand); letter-spacing: -0.02em; display: flex; align-items: center; gap: 0.5rem; }
+        .nav-links { display: flex; gap: 0.25rem; }
+        .nav-links a { padding: 0.4rem 0.85rem; border-radius: 6px; color: var(--text2); text-decoration: none; font-size: 0.875rem; font-weight: 500; transition: all 0.15s; }
+        .nav-links a:hover { background: var(--surface2); color: var(--text); }
+        .nav-links a.active { background: var(--brand-light); color: var(--brand); }
+
+        /* Layout */
+        .container { max-width: 1200px; margin: 0 auto; padding: 1.75rem 2rem; }
+        .page-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1.5rem; flex-wrap: wrap; gap: 1rem; }
+        .page-title { font-size: 1.4rem; font-weight: 700; letter-spacing: -0.02em; }
+        .subtitle { color: var(--text2); font-size: 0.875rem; margin-top: 0.25rem; }
+
+        /* Date picker */
+        .date-bar { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 0.875rem 1.25rem; display: flex; gap: 1rem; align-items: center; margin-bottom: 1.75rem; box-shadow: var(--shadow-sm); flex-wrap: wrap; }
+        .date-bar label { font-size: 0.8rem; font-weight: 600; color: var(--text2); text-transform: uppercase; letter-spacing: 0.05em; }
+        .date-bar input[type=date] { padding: 0.4rem 0.75rem; border: 1px solid var(--border); border-radius: 6px; font-size: 0.875rem; font-family: inherit; background: var(--bg); color: var(--text); cursor: pointer; }
+        .date-bar input[type=date]:focus { outline: 2px solid var(--brand); outline-offset: 2px; }
+        .date-bar .btn-go { padding: 0.4rem 1rem; background: var(--brand); color: white; border: none; border-radius: 6px; font-size: 0.85rem; font-weight: 600; font-family: inherit; cursor: pointer; transition: opacity 0.15s; }
+        .date-bar .btn-go:hover { opacity: 0.85; }
+        .date-nav { display: flex; gap: 0.4rem; }
+        .date-nav a { padding: 0.4rem 0.7rem; border: 1px solid var(--border); border-radius: 6px; font-size: 0.82rem; color: var(--text2); text-decoration: none; background: var(--bg); transition: all 0.15s; }
+        .date-nav a:hover { background: var(--surface2); color: var(--text); }
+        .summary-pill { margin-left: auto; display: flex; gap: 0.5rem; flex-wrap: wrap; }
+        .pill { background: var(--surface2); border: 1px solid var(--border); padding: 0.3rem 0.75rem; border-radius: 20px; font-size: 0.78rem; color: var(--text2); }
+        .pill strong { color: var(--text); }
+        .pill.bet-pill { background: var(--success-bg); border-color: rgba(45,122,79,0.2); color: var(--success); }
+        .pill.bet-pill strong { color: var(--success); }
+
+        /* Empty state */
+        .empty { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 3rem 2rem; text-align: center; color: var(--text2); }
+        .empty-icon { font-size: 2rem; margin-bottom: 0.75rem; }
+        .empty p { font-size: 0.95rem; font-weight: 500; margin-bottom: 0.4rem; }
+        .empty small { font-size: 0.8rem; color: var(--text3); }
+
+        /* Game cards */
+        .game-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow-sm); margin-bottom: 1.5rem; overflow: hidden; }
+        .game-card-header { padding: 1rem 1.25rem; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 0.5rem; background: var(--surface); }
+        .game-card-header.has-bet { background: rgba(45,122,79,0.03); border-left: 4px solid var(--success); }
+        .game-match { font-size: 1rem; font-weight: 700; color: var(--text); }
+        .game-meta { display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; margin-top: 0.25rem; }
+        .meta-badge { font-size: 0.7rem; font-weight: 600; padding: 0.15rem 0.55rem; border-radius: 4px; background: var(--surface2); color: var(--text2); border: 1px solid var(--border); }
+        .meta-badge.source { background: var(--info-bg); color: var(--info); border-color: #b3d4f0; }
+        .game-card-body { padding: 1.1rem 1.25rem; }
+
+        /* Markets table */
+        .markets-table-wrap { overflow-x: auto; border-radius: 8px; border: 1px solid var(--border); margin-bottom: 1rem; }
+        table { width: 100%; border-collapse: collapse; background: var(--surface); font-size: 0.83rem; }
+        thead tr { background: var(--surface2); border-bottom: 2px solid var(--border); }
+        th { padding: 0.55rem 0.8rem; text-align: left; color: var(--text2); font-size: 0.7rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; white-space: nowrap; }
+        td { padding: 0.6rem 0.8rem; border-bottom: 1px solid var(--border); vertical-align: middle; }
+        tr:last-child td { border-bottom: none; }
+        tr.row-bet { background: rgba(45,122,79,0.04); }
+        tr.row-bet:hover { background: rgba(45,122,79,0.07); }
+        tr:not(.row-bet):hover { background: var(--surface2); }
+
+        .positive { color: var(--success); font-weight: 600; }
+        .negative { color: var(--danger); font-weight: 600; }
+        .muted { color: var(--text2); }
+
+        /* Badges */
+        .badge { display: inline-flex; align-items: center; padding: 0.15rem 0.5rem; border-radius: 4px; font-size: 0.7rem; font-weight: 700; white-space: nowrap; }
+        .badge-bet    { background: var(--success-bg); color: var(--success); }
+        .badge-skip   { background: var(--surface2); color: var(--text3); border: 1px solid var(--border); }
+        .badge-won    { background: var(--success-bg); color: var(--success); }
+        .badge-lost   { background: var(--danger-bg); color: var(--danger); }
+        .badge-pending { background: var(--warning-bg); color: var(--warning); }
+
+        /* Collapsible agent votes */
+        details { margin-bottom: 0.875rem; }
+        details summary { cursor: pointer; font-size: 0.82rem; font-weight: 600; color: var(--text2); padding: 0.5rem 0.6rem; background: var(--surface2); border: 1px solid var(--border); border-radius: 6px; list-style: none; display: flex; align-items: center; gap: 0.4rem; user-select: none; transition: background 0.15s; }
+        details summary::-webkit-details-marker { display: none; }
+        details summary::before { content: '▶'; font-size: 0.65rem; color: var(--text3); transition: transform 0.2s; }
+        details[open] summary::before { transform: rotate(90deg); }
+        details summary:hover { background: var(--brand-light); color: var(--brand); border-color: var(--brand-mid); }
+        .agent-votes-grid { display: flex; flex-wrap: wrap; gap: 0.6rem; padding: 0.75rem 0 0; }
+        .agent-vote-card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 0.65rem 0.9rem; min-width: 200px; flex: 1; max-width: 340px; }
+        .agent-name { font-weight: 700; color: var(--brand); font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 0.3rem; }
+        .agent-picks { font-size: 0.78rem; color: var(--text); margin-bottom: 0.25rem; display: flex; gap: 0.75rem; flex-wrap: wrap; }
+        .agent-picks span { color: var(--text2); }
+        .agent-picks strong { color: var(--text); }
+        .agent-reasoning { font-size: 0.72rem; color: var(--text2); line-height: 1.45; }
+
+        /* Consensus section */
+        .consensus-section { margin-bottom: 0.875rem; }
+        .section-label { font-size: 0.72rem; font-weight: 700; color: var(--text3); text-transform: uppercase; letter-spacing: 0.07em; margin-bottom: 0.4rem; }
+        .consensus-body { background: var(--surface2); border: 1px solid var(--border); border-radius: 6px; padding: 0.6rem 0.85rem; font-size: 0.8rem; color: var(--text2); line-height: 1.5; }
+        .consensus-meta { display: flex; gap: 0.75rem; flex-wrap: wrap; margin-top: 0.5rem; }
+        .cmeta-item { background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 0.35rem 0.7rem; font-size: 0.75rem; }
+        .cmeta-item .lbl { color: var(--text3); font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 0.1rem; }
+        .cmeta-item .val { font-weight: 700; color: var(--text); }
+
+        /* Signals row */
+        .signals-row { display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center; margin-bottom: 0.875rem; }
+        .signal-chip { display: inline-flex; align-items: center; gap: 0.25rem; padding: 0.2rem 0.55rem; border-radius: 12px; font-size: 0.7rem; font-weight: 600; border: 1px solid; white-space: nowrap; }
+        .chip-goalie  { background: var(--success-bg); color: var(--success); border-color: #9BDFB8; }
+        .chip-goalie-weak { background: var(--danger-bg); color: var(--danger); border-color: #F5B4B4; }
+        .chip-b2b     { background: #FFF3CD; color: #7B5800; border-color: #FFD600; }
+        .chip-pdo-lucky   { background: #F0E8FA; color: #6B3FA0; border-color: #C9B3E8; }
+        .chip-pdo-unlucky { background: #E8F4FD; color: #1A6A9A; border-color: #9DD3F5; }
+        .chip-neutral { background: var(--surface2); color: var(--text2); border-color: var(--border); }
+
+        /* Placed bet inline */
+        .placed-bet { margin-top: 0.875rem; background: rgba(45,122,79,0.05); border: 1px solid rgba(45,122,79,0.2); border-radius: 8px; padding: 0.75rem 1rem; display: flex; gap: 1.5rem; flex-wrap: wrap; align-items: center; }
+        .pb-label { font-size: 0.7rem; font-weight: 700; color: var(--success); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 0.2rem; }
+        .pb-item { display: flex; flex-direction: column; }
+        .pb-val { font-size: 0.88rem; font-weight: 700; color: var(--text); }
+        .pb-sub { font-size: 0.68rem; color: var(--text3); }
+        .pb-pnl.positive { color: var(--success); font-size: 0.88rem; font-weight: 700; }
+        .pb-pnl.negative { color: var(--danger); font-size: 0.88rem; font-weight: 700; }
+
+        footer { text-align: center; padding: 2rem; color: var(--text3); font-size: 0.78rem; border-top: 1px solid var(--border); margin-top: 2rem; }
+    </style>
+</head>
+<body>
+<nav>
+    <div class="logo">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="#CF4E2E" stroke-width="2"/><path d="M8 12l3 3 5-5" stroke="#CF4E2E" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        BetBrain
+    </div>
+    <div class="nav-links">
+        <a href="/">Analysis</a>
+        <a href="/backtest">Backtest</a>
+        <a href="/paper">Paper Trade</a>
+        <a href="/audit" class="active">Audit</a>
+    </div>
+</nav>
+
+<div class="container">
+    <div class="page-header">
+        <div>
+            <div class="page-title">Audit Log</div>
+            <div class="subtitle">Full inference detail — every game analysed, every market evaluated</div>
+        </div>
+    </div>
+
+    <!-- Date picker bar -->
+    <div class="date-bar">
+        <label>Date</label>
+        <input type="date" id="datePicker" value="{{ date }}" max="{{ date }}">
+        <button class="btn-go" onclick="goToDate()">View</button>
+        <div class="date-nav">
+            {% set parts = date.split('-') %}
+            {% set prev_date = date %}
+            <a href="/audit?date={{ date }}" id="prevDay">&larr; Prev</a>
+            <a href="/audit?date={{ date }}" id="nextDay">Next &rarr;</a>
+        </div>
+        {% set match_count = entries | map(attribute='match') | list | unique | list | length %}
+        {% set bet_count = entries | selectattr('bet_placed', 'equalto', 1) | list | length %}
+        <div class="summary-pill">
+            <span class="pill"><strong>{{ match_count }}</strong> game{{ 's' if match_count != 1 else '' }}</span>
+            <span class="pill"><strong>{{ entries | length }}</strong> market rows</span>
+            {% if bet_count > 0 %}
+            <span class="pill bet-pill"><strong>{{ bet_count }}</strong> bet{{ 's' if bet_count != 1 else '' }} placed</span>
+            {% endif %}
+            {% if bets %}
+            <span class="pill bet-pill"><strong>{{ bets | length }}</strong> paper bet{{ 's' if bets | length != 1 else '' }} settled/pending</span>
+            {% endif %}
+        </div>
+    </div>
+
+    {% if not entries %}
+    <div class="empty">
+        <div class="empty-icon">&#x1F50D;</div>
+        <p>No inference runs found for {{ date }}</p>
+        <small>The pipeline logs every game it analyses. Try a different date or run the analysis pipeline.</small>
+    </div>
+
+    {% else %}
+
+    {% set ns = namespace(last_match='') %}
+    {% set matches_seen = [] %}
+
+    {# Group entries by match #}
+    {% for match in entries | map(attribute='match') | list | unique %}
+    {% set match_rows = entries | selectattr('match', 'equalto', match) | list %}
+    {% set d = match_rows[0].details %}
+    {% set any_bet = match_rows | selectattr('bet_placed', 'equalto', 1) | list | length > 0 %}
+
+    {# Find matching paper bet(s) for this match #}
+    {% set match_bets = bets | selectattr('match', 'equalto', match) | list %}
+
+    <div class="game-card">
+        <div class="game-card-header {{ 'has-bet' if any_bet else '' }}">
+            <div>
+                <div class="game-match">{{ match }}</div>
+                <div class="game-meta">
+                    <span class="meta-badge">{{ match_rows[0].game_date }}</span>
+                    {% if match_rows[0].start_time %}
+                    <span class="meta-badge">{{ match_rows[0].start_time }}</span>
+                    {% endif %}
+                    {% if match_rows[0].odds_source %}
+                    <span class="meta-badge source">{{ match_rows[0].odds_source }}</span>
+                    {% endif %}
+                    {% if any_bet %}
+                    <span class="meta-badge" style="background:var(--success-bg);color:var(--success);border-color:rgba(45,122,79,0.2);">Bet placed</span>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <div class="game-card-body">
+
+            {# --- Signals row --- #}
+            {% set home_parts = match.split(' @ ') %}
+            {% set away_team = home_parts[0] if home_parts|length > 1 else '' %}
+            {% set home_team = home_parts[1] if home_parts|length > 1 else match %}
+            <div class="signals-row">
+                {% if d.home_goalie %}
+                    {% if d.home_goalie_sv and d.home_goalie_sv >= 91.8 %}
+                    <span class="signal-chip chip-goalie">&#x1F945; {{ home_team }} {{ d.home_goalie }} {{ d.home_goalie_sv }}% SV</span>
+                    {% elif d.home_goalie_sv and d.home_goalie_sv < 90.0 %}
+                    <span class="signal-chip chip-goalie-weak">&#x26A0; {{ home_team }} {{ d.home_goalie }} {{ d.home_goalie_sv }}% SV</span>
+                    {% else %}
+                    <span class="signal-chip chip-neutral">&#x1F945; {{ home_team }} {{ d.home_goalie }}{% if d.home_goalie_sv %} {{ d.home_goalie_sv }}% SV{% endif %}</span>
+                    {% endif %}
+                {% endif %}
+                {% if d.away_goalie %}
+                    {% if d.away_goalie_sv and d.away_goalie_sv >= 91.8 %}
+                    <span class="signal-chip chip-goalie">&#x1F945; {{ away_team }} {{ d.away_goalie }} {{ d.away_goalie_sv }}% SV</span>
+                    {% elif d.away_goalie_sv and d.away_goalie_sv < 90.0 %}
+                    <span class="signal-chip chip-goalie-weak">&#x26A0; {{ away_team }} {{ d.away_goalie }} {{ d.away_goalie_sv }}% SV</span>
+                    {% else %}
+                    <span class="signal-chip chip-neutral">&#x1F945; {{ away_team }} {{ d.away_goalie }}{% if d.away_goalie_sv %} {{ d.away_goalie_sv }}% SV{% endif %}</span>
+                    {% endif %}
+                {% endif %}
+                {% if d.home_b2b %}
+                <span class="signal-chip chip-b2b">&#x26A1; {{ home_team }} B2B</span>
+                {% endif %}
+                {% if d.away_b2b %}
+                <span class="signal-chip chip-b2b">&#x26A1; {{ away_team }} B2B (road)</span>
+                {% endif %}
+                {% if d.home_pdo %}
+                    {% if d.home_pdo > 102 %}
+                    <span class="signal-chip chip-pdo-lucky">{{ home_team }} PDO {{ "%.1f"|format(d.home_pdo) }} (lucky)</span>
+                    {% elif d.home_pdo < 98 %}
+                    <span class="signal-chip chip-pdo-unlucky">{{ home_team }} PDO {{ "%.1f"|format(d.home_pdo) }} (unlucky)</span>
+                    {% endif %}
+                {% endif %}
+                {% if d.away_pdo %}
+                    {% if d.away_pdo > 102 %}
+                    <span class="signal-chip chip-pdo-lucky">{{ away_team }} PDO {{ "%.1f"|format(d.away_pdo) }} (lucky)</span>
+                    {% elif d.away_pdo < 98 %}
+                    <span class="signal-chip chip-pdo-unlucky">{{ away_team }} PDO {{ "%.1f"|format(d.away_pdo) }} (unlucky)</span>
+                    {% endif %}
+                {% endif %}
+                {% if not d.home_goalie and not d.away_goalie and not d.home_b2b and not d.away_b2b %}
+                <span style="font-size:0.75rem;color:var(--text3);">No signals recorded</span>
+                {% endif %}
+            </div>
+
+            {# --- Markets table --- #}
+            <div class="markets-table-wrap">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Market</th>
+                            <th>Pick</th>
+                            <th>Odds</th>
+                            <th>Model%</th>
+                            <th>Mkt%</th>
+                            <th>Edge</th>
+                            <th>Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for row in match_rows %}
+                        <tr class="{{ 'row-bet' if row.bet_placed == 1 else '' }}">
+                            <td class="muted">{{ row.market }}</td>
+                            <td style="font-weight:600;">{{ row.pick or '—' }}</td>
+                            <td style="font-weight:700;">{{ "%.3f"|format(row.odds) if row.odds else '—' }}</td>
+                            <td class="{{ 'positive' if row.model_prob > 0.5 else 'muted' }}">{{ "%.1f"|format(row.model_prob * 100) }}%</td>
+                            <td class="muted">{{ "%.1f"|format(row.implied_prob * 100) }}%</td>
+                            <td class="{{ 'positive' if row.edge >= 0.03 else ('negative' if row.edge < 0 else 'muted') }}" style="font-weight:700;">
+                                {{ "%+.1f"|format(row.edge * 100) }}%
+                            </td>
+                            <td>
+                                {% if row.bet_placed == 1 %}
+                                <span class="badge badge-bet">BET</span>
+                                {% else %}
+                                <span class="badge badge-skip">SKIP</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+
+            {# --- Agent votes (collapsible) --- #}
+            {% if d.agent_votes %}
+            <details>
+                <summary>Agent Votes ({{ d.agent_votes | length }} agents)</summary>
+                <div class="agent-votes-grid">
+                    {% for v in d.agent_votes %}
+                    <div class="agent-vote-card">
+                        <div class="agent-name">{{ v.agent }}</div>
+                        <div class="agent-picks">
+                            <span>ML: <strong>{{ (v.ml or '—') | upper }}</strong> {{ v.ml_conf }}%</span>
+                            <span>O/U: <strong>{{ (v.ou or '—') | upper }}</strong> {{ v.ou_conf }}%</span>
+                        </div>
+                        <div class="agent-reasoning">{{ v.reasoning or '' }}</div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </details>
+            {% endif %}
+
+            {# --- Consensus section --- #}
+            {% if d.reasoning or d.vote_summary or d.score_pred or d.confidence %}
+            <div class="consensus-section">
+                <div class="section-label">Consensus</div>
+                <div class="consensus-body">
+                    {% if d.reasoning %}{{ d.reasoning }}{% else %}<em style="color:var(--text3);">No reasoning recorded.</em>{% endif %}
+                    <div class="consensus-meta">
+                        {% if d.score_pred %}
+                        <div class="cmeta-item">
+                            <div class="lbl">Score Pred</div>
+                            <div class="val">{{ d.score_pred }}</div>
+                        </div>
+                        {% endif %}
+                        {% if d.pred_total %}
+                        <div class="cmeta-item">
+                            <div class="lbl">Pred Total / O/U Line</div>
+                            <div class="val">{{ d.pred_total }} / {{ d.ou_line or '6.5' }}</div>
+                        </div>
+                        {% endif %}
+                        {% if d.confidence %}
+                        <div class="cmeta-item">
+                            <div class="lbl">Confidence Tier</div>
+                            <div class="val">{{ d.confidence | upper }}</div>
+                        </div>
+                        {% endif %}
+                        {% if d.vote_summary %}
+                        <div class="cmeta-item" style="flex:1;min-width:180px;">
+                            <div class="lbl">Vote Summary</div>
+                            <div class="val" style="font-size:0.78rem;font-weight:500;white-space:pre-wrap;">{{ d.vote_summary }}</div>
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+
+            {# --- Placed paper bets for this match --- #}
+            {% if match_bets %}
+            {% for pb in match_bets %}
+            <div class="placed-bet">
+                <div class="pb-item">
+                    <div class="pb-label">Paper Bet</div>
+                    <div class="pb-val">{{ pb.market }} — {{ pb.pick or '—' }}</div>
+                    <div class="pb-sub">Placed {{ pb.timestamp[:16] if pb.timestamp else '—' }}</div>
+                </div>
+                <div class="pb-item">
+                    <div class="pb-label">Odds</div>
+                    <div class="pb-val">{{ "%.3f"|format(pb.odds) }}</div>
+                </div>
+                <div class="pb-item">
+                    <div class="pb-label">Stake</div>
+                    <div class="pb-val">${{ "%.0f"|format(pb.stake) }}</div>
+                </div>
+                <div class="pb-item">
+                    <div class="pb-label">Status</div>
+                    <span class="badge badge-{{ pb.status }}">{{ pb.status | upper }}</span>
+                </div>
+                {% if pb.status != 'pending' %}
+                <div class="pb-item">
+                    <div class="pb-label">P&amp;L</div>
+                    <div class="pb-pnl {{ 'positive' if pb.profit > 0 else 'negative' }}">${{ "%+.2f"|format(pb.profit) }}</div>
+                </div>
+                {% endif %}
+            </div>
+            {% endfor %}
+            {% endif %}
+
+        </div><!-- /game-card-body -->
+    </div><!-- /game-card -->
+    {% endfor %}
+
+    {% endif %}
+</div><!-- /container -->
+
+<footer>BetBrain — Simulation only. No real money involved. Gamble responsibly.</footer>
+
+<script>
+// Date navigation
+(function() {
+    const picker = document.getElementById('datePicker');
+    const prevLink = document.getElementById('prevDay');
+    const nextLink = document.getElementById('nextDay');
+
+    function offsetDate(dateStr, days) {
+        const d = new Date(dateStr + 'T12:00:00');
+        d.setDate(d.getDate() + days);
+        return d.toISOString().slice(0, 10);
+    }
+
+    const current = picker.value;
+    prevLink.href = '/audit?date=' + offsetDate(current, -1);
+    nextLink.href = '/audit?date=' + offsetDate(current, +1);
+
+    const today = new Date().toISOString().slice(0, 10);
+    if (current >= today) {
+        nextLink.style.opacity = '0.4';
+        nextLink.style.pointerEvents = 'none';
+    }
+})();
+
+function goToDate() {
+    const val = document.getElementById('datePicker').value;
+    if (val) window.location.href = '/audit?date=' + val;
+}
+
+// Allow pressing Enter in the date picker to navigate
+document.getElementById('datePicker').addEventListener('change', function() {
+    goToDate();
+});
+</script>
+</body>
+</html>

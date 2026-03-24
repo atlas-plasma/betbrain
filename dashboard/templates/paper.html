@@ -118,6 +118,30 @@
         .empty p { margin-bottom: 0.5rem; }
         .empty small { font-size: 0.78rem; color: var(--text3); }
         footer { text-align: center; padding: 2rem; color: var(--text3); font-size: 0.78rem; border-top: 1px solid var(--border); margin-top: 2rem; }
+
+        /* Two-column layout */
+        .main-layout { display: flex; gap: 1.5rem; align-items: flex-start; }
+        .main-col { flex: 1; min-width: 0; }
+        .side-panel { width: 280px; flex-shrink: 0; position: sticky; top: 72px; }
+        .side-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow-sm); overflow: hidden; }
+        .side-card-header { padding: 0.85rem 1rem; border-bottom: 1px solid var(--border); background: var(--surface2); display: flex; justify-content: space-between; align-items: center; }
+        .side-card-title { font-size: 0.85rem; font-weight: 700; }
+        .side-card-meta { font-size: 0.72rem; color: var(--text3); }
+        .inference-list { max-height: 70vh; overflow-y: auto; }
+        .inference-group { border-bottom: 1px solid var(--border); padding: 0.75rem 1rem; }
+        .inference-group:last-child { border-bottom: none; }
+        .inf-match { font-size: 0.82rem; font-weight: 700; color: var(--text); margin-bottom: 0.4rem; display: flex; justify-content: space-between; align-items: center; }
+        .inf-time { font-size: 0.7rem; color: var(--text3); font-weight: 400; }
+        .inf-row { display: flex; justify-content: space-between; align-items: center; padding: 0.2rem 0; font-size: 0.75rem; }
+        .inf-market { color: var(--text2); }
+        .inf-edge { font-weight: 600; }
+        .inf-edge.positive { color: var(--success); }
+        .inf-edge.negative { color: var(--danger); }
+        .inf-badge { font-size: 0.65rem; font-weight: 700; padding: 0.1rem 0.4rem; border-radius: 3px; }
+        .inf-badge.bet { background: var(--success-bg); color: var(--success); }
+        .inf-badge.skip { background: var(--surface2); color: var(--text3); }
+        .inf-empty { padding: 1.5rem 1rem; text-align: center; color: var(--text3); font-size: 0.8rem; }
+        @media (max-width: 900px) { .main-layout { flex-direction: column; } .side-panel { width: 100%; position: static; } }
     </style>
 </head>
 <body>
@@ -130,10 +154,13 @@
         <a href="/">Analysis</a>
         <a href="/backtest">Backtest</a>
         <a href="/paper" class="active">Paper Trade</a>
+        <a href="/audit">Audit</a>
     </div>
 </nav>
 
 <div class="container">
+<div class="main-layout">
+<div class="main-col">
     <div class="page-header">
         <div>
             <div class="page-title">Paper Trading</div>
@@ -291,6 +318,7 @@
                     <tr>
                         <th>Placed</th>
                         <th>Match</th>
+                        <th>Game time</th>
                         <th>Backing</th>
                         <th>Market</th>
                         <th>Odds</th>
@@ -305,6 +333,7 @@
                     <tr>
                         <td class="muted">{{ bet.timestamp[5:16] }}</td>
                         <td style="font-weight:600;">{{ bet.match }}</td>
+                        <td class="muted">{{ bet.start_time or '—' }}</td>
                         <td style="font-weight:600;color:var(--brand);">{{ bet.pick or '—' }}</td>
                         <td class="muted">{{ bet.market }}</td>
                         <td style="font-weight:700;">{{ "%.3f"|format(bet.odds) }}</td>
@@ -338,6 +367,7 @@
                     <tr>
                         <th>Date</th>
                         <th>Match</th>
+                        <th>Game time</th>
                         <th>Backed</th>
                         <th>Market</th>
                         <th>Odds</th>
@@ -352,6 +382,7 @@
                     <tr>
                         <td class="muted">{{ bet.timestamp[:10] }}</td>
                         <td style="font-weight:600;">{{ bet.match }}</td>
+                        <td class="muted">{{ bet.start_time or '—' }}</td>
                         <td style="font-weight:600;">{{ bet.pick or '—' }}</td>
                         <td class="muted">{{ bet.market }}</td>
                         <td>{{ "%.3f"|format(bet.odds) }}</td>
@@ -374,6 +405,33 @@
             <small>Bets appear here after they are settled.</small>
         </div>
         {% endif %}
+    </div>
+</div><!-- /main-col -->
+
+<!-- Inference side panel -->
+<div class="side-panel">
+    <div class="side-card">
+        <div class="side-card-header">
+            <span class="side-card-title">Recent analyses</span>
+            <span class="side-card-meta" id="infMeta">last 24h</span>
+        </div>
+        <div class="inference-list" id="inferenceList">
+            <div class="inf-empty">Loading...</div>
+        </div>
+    </div>
+</div>
+
+</div><!-- /main-layout -->
+</div><!-- /container -->
+
+<!-- Analysis modal -->
+<div id="analysisModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:1000;align-items:center;justify-content:center;padding:1rem;">
+    <div style="background:var(--surface);border-radius:12px;box-shadow:0 20px 60px rgba(0,0,0,0.2);max-width:680px;width:100%;max-height:88vh;display:flex;flex-direction:column;">
+        <div style="padding:1rem 1.25rem;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;">
+            <span style="font-weight:700;font-size:0.95rem;">Game Analysis</span>
+            <button onclick="closeModal()" style="background:none;border:none;cursor:pointer;font-size:1.2rem;color:var(--text2);">✕</button>
+        </div>
+        <div id="modalBody" style="padding:1.25rem;overflow-y:auto;"></div>
     </div>
 </div>
 
@@ -431,6 +489,172 @@ function settleBet(id, won) {
         body: JSON.stringify({bet_id: id, won: won})
     }).then(() => location.reload());
 }
+
+// ---- Analysis modal ----
+let _inferenceData = [];
+
+function openAnalysis(match) {
+    const groups = {};
+    _inferenceData.forEach(r => {
+        if (!groups[r.match]) groups[r.match] = { time: r.start_time, rows: [], details: r.details || {} };
+        groups[r.match].rows.push(r);
+        if (r.details && Object.keys(r.details).length) groups[r.match].details = r.details;
+    });
+    const g = groups[match];
+    if (!g) return;
+    const d = g.details;
+
+    let html = `<div style="font-size:1rem;font-weight:700;margin-bottom:0.75rem;">${match} <span style="font-size:0.8rem;font-weight:400;color:var(--text3);">${g.time || ''}</span></div>`;
+
+    // Score prediction + confidence
+    if (d.score_pred) {
+        html += `<div style="display:flex;gap:1rem;margin-bottom:1rem;flex-wrap:wrap;">
+            <div style="background:var(--surface2);padding:0.5rem 0.9rem;border-radius:8px;font-size:0.82rem;">
+                <div style="color:var(--text3);font-size:0.7rem;text-transform:uppercase;letter-spacing:0.05em;">Score pred</div>
+                <div style="font-weight:700;">${d.score_pred} (total ${d.pred_total})</div>
+            </div>
+            <div style="background:var(--surface2);padding:0.5rem 0.9rem;border-radius:8px;font-size:0.82rem;">
+                <div style="color:var(--text3);font-size:0.7rem;text-transform:uppercase;letter-spacing:0.05em;">O/U line</div>
+                <div style="font-weight:700;">${d.ou_line}</div>
+            </div>
+            <div style="background:var(--surface2);padding:0.5rem 0.9rem;border-radius:8px;font-size:0.82rem;">
+                <div style="color:var(--text3);font-size:0.7rem;text-transform:uppercase;letter-spacing:0.05em;">Confidence</div>
+                <div style="font-weight:700;">${d.confidence || '—'}</div>
+            </div>
+        </div>`;
+    }
+
+    // Markets table
+    html += `<table style="width:100%;border-collapse:collapse;font-size:0.8rem;margin-bottom:1rem;">
+        <thead><tr style="background:var(--surface2);">
+            <th style="padding:0.4rem 0.6rem;text-align:left;color:var(--text2);font-size:0.7rem;text-transform:uppercase;">Market</th>
+            <th style="padding:0.4rem 0.6rem;text-align:left;color:var(--text2);font-size:0.7rem;text-transform:uppercase;">Pick</th>
+            <th style="padding:0.4rem 0.6rem;text-align:right;color:var(--text2);font-size:0.7rem;text-transform:uppercase;">Odds</th>
+            <th style="padding:0.4rem 0.6rem;text-align:right;color:var(--text2);font-size:0.7rem;text-transform:uppercase;">Model%</th>
+            <th style="padding:0.4rem 0.6rem;text-align:right;color:var(--text2);font-size:0.7rem;text-transform:uppercase;">Mkt%</th>
+            <th style="padding:0.4rem 0.6rem;text-align:right;color:var(--text2);font-size:0.7rem;text-transform:uppercase;">Edge</th>
+            <th style="padding:0.4rem 0.6rem;text-align:center;color:var(--text2);font-size:0.7rem;text-transform:uppercase;">Action</th>
+        </tr></thead><tbody>`;
+    g.rows.forEach(r => {
+        const edgeColor = r.edge >= 0.03 ? 'var(--success)' : 'var(--danger)';
+        const badge = r.bet_placed ? '<span style="background:var(--success-bg);color:var(--success);padding:0.1rem 0.4rem;border-radius:3px;font-size:0.7rem;font-weight:700;">BET</span>'
+                                   : '<span style="background:var(--surface2);color:var(--text3);padding:0.1rem 0.4rem;border-radius:3px;font-size:0.7rem;font-weight:700;">SKIP</span>';
+        html += `<tr style="border-bottom:1px solid var(--border);">
+            <td style="padding:0.4rem 0.6rem;">${r.market}</td>
+            <td style="padding:0.4rem 0.6rem;font-weight:600;">${r.pick || '—'}</td>
+            <td style="padding:0.4rem 0.6rem;text-align:right;">${r.odds.toFixed(2)}</td>
+            <td style="padding:0.4rem 0.6rem;text-align:right;">${(r.model_prob*100).toFixed(1)}%</td>
+            <td style="padding:0.4rem 0.6rem;text-align:right;">${(r.implied_prob*100).toFixed(1)}%</td>
+            <td style="padding:0.4rem 0.6rem;text-align:right;color:${edgeColor};font-weight:700;">${(r.edge*100).toFixed(1)}%</td>
+            <td style="padding:0.4rem 0.6rem;text-align:center;">${badge}</td>
+        </tr>`;
+    });
+    html += `</tbody></table>`;
+
+    // Agent votes
+    if (d.agent_votes && d.agent_votes.length) {
+        html += `<div style="font-weight:700;font-size:0.82rem;margin-bottom:0.5rem;">Agent votes</div>`;
+        html += `<table style="width:100%;border-collapse:collapse;font-size:0.78rem;margin-bottom:1rem;">
+            <thead><tr style="background:var(--surface2);">
+                <th style="padding:0.35rem 0.6rem;text-align:left;color:var(--text2);font-size:0.68rem;text-transform:uppercase;">Agent</th>
+                <th style="padding:0.35rem 0.6rem;text-align:left;color:var(--text2);font-size:0.68rem;text-transform:uppercase;">ML pick</th>
+                <th style="padding:0.35rem 0.6rem;text-align:right;color:var(--text2);font-size:0.68rem;text-transform:uppercase;">Conf</th>
+                <th style="padding:0.35rem 0.6rem;text-align:left;color:var(--text2);font-size:0.68rem;text-transform:uppercase;">O/U</th>
+                <th style="padding:0.35rem 0.6rem;text-align:right;color:var(--text2);font-size:0.68rem;text-transform:uppercase;">Conf</th>
+            </tr></thead><tbody>`;
+        d.agent_votes.forEach(v => {
+            html += `<tr style="border-bottom:1px solid var(--border);">
+                <td style="padding:0.35rem 0.6rem;font-weight:600;">${v.agent}</td>
+                <td style="padding:0.35rem 0.6rem;">${v.ml}</td>
+                <td style="padding:0.35rem 0.6rem;text-align:right;">${v.ml_conf}%</td>
+                <td style="padding:0.35rem 0.6rem;">${v.ou}</td>
+                <td style="padding:0.35rem 0.6rem;text-align:right;">${v.ou_conf}%</td>
+            </tr>
+            <tr style="border-bottom:1px solid var(--border);"><td colspan="5" style="padding:0.2rem 0.6rem 0.5rem;color:var(--text2);font-size:0.72rem;">${v.reasoning || ''}</td></tr>`;
+        });
+        html += `</tbody></table>`;
+    }
+
+    // Overall reasoning
+    if (d.reasoning) {
+        html += `<div style="font-weight:700;font-size:0.82rem;margin-bottom:0.4rem;">Consensus reasoning</div>
+        <div style="background:var(--surface2);padding:0.75rem;border-radius:8px;font-size:0.8rem;color:var(--text2);line-height:1.5;">${d.reasoning}</div>`;
+    }
+
+    // Signals
+    if (d.home_goalie || d.away_goalie) {
+        const teams = match.split(' @ ');
+        html += `<div style="margin-top:0.75rem;display:flex;gap:0.75rem;flex-wrap:wrap;font-size:0.75rem;">`;
+        if (d.home_goalie) html += `<div style="background:var(--surface2);padding:0.4rem 0.7rem;border-radius:6px;"><span style="color:var(--text3);">${teams[1] || 'Home'} goalie</span><br><strong>${d.home_goalie}</strong> (${d.home_goalie_sv}% SV)</div>`;
+        if (d.away_goalie) html += `<div style="background:var(--surface2);padding:0.4rem 0.7rem;border-radius:6px;"><span style="color:var(--text3);">${teams[0] || 'Away'} goalie</span><br><strong>${d.away_goalie}</strong> (${d.away_goalie_sv}% SV)</div>`;
+        if (d.home_b2b) html += `<div style="background:var(--warning-bg);color:var(--warning);padding:0.4rem 0.7rem;border-radius:6px;">Home B2B fatigue</div>`;
+        if (d.away_b2b) html += `<div style="background:var(--warning-bg);color:var(--warning);padding:0.4rem 0.7rem;border-radius:6px;">Away B2B fatigue</div>`;
+        html += `</div>`;
+    }
+
+    document.getElementById('modalBody').innerHTML = html;
+    document.getElementById('analysisModal').style.display = 'flex';
+}
+
+function closeModal() {
+    document.getElementById('analysisModal').style.display = 'none';
+}
+
+// ---- Inference side panel ----
+function loadInferencePanel() {
+    fetch('/api/inference/recent?hours=24')
+        .then(r => r.json())
+        .then(data => {
+            _inferenceData = data;
+            const el = document.getElementById('inferenceList');
+            if (!data.length) {
+                el.innerHTML = '<div class="inf-empty">No analyses yet.<br><small>Fills up once the auto-trader runs.</small></div>';
+                document.getElementById('infMeta').textContent = '0 games';
+                return;
+            }
+
+            const groups = {};
+            data.forEach(r => {
+                if (!groups[r.match]) groups[r.match] = { time: r.start_time, rows: [] };
+                groups[r.match].rows.push(r);
+            });
+
+            const matchCount = Object.keys(groups).length;
+            document.getElementById('infMeta').textContent = `${matchCount} game${matchCount !== 1 ? 's' : ''} · last 24h`;
+
+            let html = '';
+            Object.entries(groups).forEach(([match, g]) => {
+                const anyBet = g.rows.some(r => r.bet_placed);
+                const borderColor = anyBet ? 'var(--success)' : 'var(--border)';
+                const bgColor = anyBet ? 'rgba(45,122,79,0.04)' : '';
+                const matchEnc = match.replace(/'/g, "\\'");
+                html += `<div class="inference-group" style="border-left:3px solid ${borderColor};background:${bgColor};padding-left:0.85rem;cursor:pointer;" onclick="openAnalysis('${matchEnc}')">`;
+                html += `<div class="inf-match">${match} <span class="inf-time">${g.time || ''}</span></div>`;
+                g.rows.forEach(r => {
+                    const edgeClass = r.edge >= 0.03 ? 'positive' : 'negative';
+                    const badge = r.bet_placed
+                        ? '<span class="inf-badge bet">BET</span>'
+                        : '<span class="inf-badge skip">SKIP</span>';
+                    html += `<div class="inf-row">
+                        <span class="inf-market">${r.market}</span>
+                        <span style="display:flex;gap:0.4rem;align-items:center;">
+                            <span class="inf-edge ${edgeClass}">${(r.edge*100).toFixed(1)}%</span>
+                            ${badge}
+                        </span>
+                    </div>`;
+                });
+                html += `<div style="font-size:0.68rem;color:var(--text3);margin-top:0.3rem;">Click to see full analysis</div>`;
+                html += `</div>`;
+            });
+            el.innerHTML = html;
+        })
+        .catch(() => {
+            document.getElementById('inferenceList').innerHTML = '<div class="inf-empty">Could not load.</div>';
+        });
+}
+
+loadInferencePanel();
+setInterval(loadInferencePanel, 60000);
 </script>
 </body>
 </html>

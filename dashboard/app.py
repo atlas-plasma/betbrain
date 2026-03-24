@@ -25,6 +25,7 @@ from backtest import run_backtest
 from strategy.selector import StrategySelector
 import cache.backtest_cache as backtest_cache
 from auto_trade import place_todays_bets, settle_pending_bets, check_and_place_due_bets
+from cache.inference_log import get_recent as get_inference_log
 
 app = Flask(__name__)
 app.jinja_env.globals['enumerate'] = enumerate
@@ -189,6 +190,13 @@ def paper_trading():
     except Exception:
         pass
 
+    # Build match → start_time lookup so bet rows can show game time
+    start_time_map = {c["match"]: c["start_time"] for c in schedule_cards}
+    for b in pending:
+        b["start_time"] = start_time_map.get(b["match"], "")
+    for b in history:
+        b["start_time"] = start_time_map.get(b["match"], "")
+
     return render_template('paper.html',
                            status=status,
                            pending=pending,
@@ -289,6 +297,23 @@ def api_auto_settle():
     """Manually trigger settlement of yesterday's pending bets."""
     settled = settle_pending_bets()
     return jsonify({"settled": len(settled), "bets": settled})
+
+
+@app.route('/audit')
+def audit():
+    from cache.inference_log import get_for_date
+    date = request.args.get('date', datetime.now().strftime('%Y-%m-%d'))
+    entries = get_for_date(date)
+    trader = get_paper_trader()
+    all_bets = trader.get_history(limit=500)
+    date_bets = [b for b in all_bets if b.get('timestamp', '').startswith(date)]
+    return render_template('audit.html', date=date, entries=entries, bets=date_bets)
+
+
+@app.route('/api/inference/recent')
+def api_inference_recent():
+    hours = int(request.args.get('hours', 24))
+    return jsonify(get_inference_log(hours=hours))
 
 
 if __name__ == '__main__':

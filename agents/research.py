@@ -226,7 +226,7 @@ class ResearchAgent(BaseAgent):
     def _search_injuries(self, home: str, away: str) -> str:
         """Try multiple search queries and return combined text."""
         try:
-            from duckduckgo_search import DDGS
+            from ddgs import DDGS
             results = []
             queries = [
                 f"NHL {home} {away} injury lineup today",

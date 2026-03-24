@@ -35,6 +35,7 @@ from papertrade import get_paper_trader
 from data.historical import HistoricalNHL
 from data.nhl import NHLDataFetcher
 from cache.odds_store import settle_game
+from cache.inference_log import log_inference
 
 
 STRATEGY        = os.environ.get("AUTO_STRATEGY", "value")
@@ -64,6 +65,7 @@ def place_bets_for_game(opp_group: List[Dict]) -> List[Dict]:
         return []
 
     placed = []
+    placed_keys = set()
     seen   = set()
     for o in opp_group:
         if not selector.should_bet(o):
@@ -90,8 +92,10 @@ def place_bets_for_game(opp_group: List[Dict]) -> List[Dict]:
         )
         print(f"  [bet] {o['match']} | {o['market']} @ {o['odds']:.3f} | "
               f"pick={o.get('win_pick','?')} edge={o.get('edge',0)*100:.1f}%")
+        placed_keys.add((o["match"], o["market"]))
         placed.append(bet)
 
+    log_inference(opp_group, placed_keys)
     return placed
 
 
@@ -102,15 +106,28 @@ def place_todays_bets() -> List[Dict]:
     catching up if the scheduler missed a window).
     """
     print(f"[auto_trade] Manual place — strategy={STRATEGY}")
-    today = datetime.now().strftime("%Y-%m-%d")
+    now     = datetime.now()
+    cutoff  = now + timedelta(hours=36)
 
     try:
         pipeline = BetBrainPipeline()
-        opps     = pipeline.run(days=1)
-        opps_today = [o for o in opps if o.get("date") == today]
+        opps     = pipeline.run(days=2)
+
+        def _upcoming(o):
+            start = o.get("start_time", "")
+            date  = o.get("date", "")
+            if not start or start == "TBD" or not date:
+                return False
+            try:
+                game_dt = datetime.strptime(f"{date} {start}", "%Y-%m-%d %H:%M")
+                return now < game_dt <= cutoff
+            except ValueError:
+                return False
+
+        opps_today = [o for o in opps if _upcoming(o)]
 
         if not opps_today:
-            print(f"[auto_trade] No games for {today}")
+            print(f"[auto_trade] No upcoming games in next 36h")
             return []
 
         # Group by match
@@ -240,32 +257,32 @@ def check_and_place_due_bets() -> List[Dict]:
     Checks today's game schedule and places bets for any game whose
     window (MINUTES_BEFORE minutes before start) has opened.
     """
-    today = datetime.now().strftime("%Y-%m-%d")
-    now   = datetime.now()
+    now = datetime.now()
 
     try:
         nhl_fetcher = NHLDataFetcher()
-        schedule    = nhl_fetcher.get_schedule(days_forward=3)
-        todays_games = [g for g in schedule if g.get("date") == today]
+        # Fetch enough days to cover games whose SA date is tomorrow
+        schedule    = nhl_fetcher.get_schedule(days_forward=5)
 
-        if not todays_games:
-            return []
-
-        # Find games whose bet window just opened (within the last minute)
+        # Find games whose bet window just opened (within the last 2 minutes)
+        # Use the game's own date field (already in SA local time) combined
+        # with the start_time so we don't filter by "today" — games that
+        # start at 01:00 SA belong to the next calendar day.
         due_games = []
-        for game in todays_games:
-            start_str = game.get("start_time", "")   # "HH:MM" local time
-            if not start_str or start_str == "TBD":
+        for game in schedule:
+            start_str = game.get("start_time", "")
+            game_date = game.get("date", "")
+            if not start_str or start_str == "TBD" or not game_date:
                 continue
             try:
                 game_time = datetime.strptime(
-                    f"{today} {start_str}", "%Y-%m-%d %H:%M"
+                    f"{game_date} {start_str}", "%Y-%m-%d %H:%M"
                 )
             except ValueError:
                 continue
 
             bet_window = game_time - timedelta(minutes=MINUTES_BEFORE)
-            key = (today, game["home_team"], game["away_team"])
+            key = (game_date, game["home_team"], game["away_team"])
 
             # Window opened in the last 2 minutes AND not already bet
             if bet_window <= now < bet_window + timedelta(minutes=2) and key not in _already_bet:

@@ -79,23 +79,25 @@ class NHLDataFetcher:
                             continue
 
                         start_time = ""
+                        local_date = day_date  # fallback to NHL's ET date
                         utc_str = game.get("startTimeUTC", "")
                         if utc_str:
                             try:
                                 utc_time = datetime.fromisoformat(utc_str.replace("Z", "+00:00"))
                                 local_time = utc_time.astimezone(datetime.now().astimezone().tzinfo)
                                 start_time = local_time.strftime("%H:%M")
+                                local_date = local_time.strftime("%Y-%m-%d")  # use local date, not ET date
                             except Exception:
                                 pass
 
                         home = game.get("homeTeam", {}).get("abbrev")
                         away = game.get("awayTeam", {}).get("abbrev")
-                        key  = (day_date, home, away)
+                        key  = (local_date, home, away)
                         if key in seen_keys:
                             continue
                         seen_keys.add(key)
                         games.append({
-                            "date": day_date,
+                            "date": local_date,
                             "home_team": home,
                             "away_team": away,
                             "home_id": game.get("homeTeam", {}).get("id"),
