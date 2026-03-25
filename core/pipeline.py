@@ -46,7 +46,7 @@ def _ev(model_prob: float, odds: float) -> float:
 def _conf_label(conf: float) -> str:
     if conf >= 0.60:
         return "high"
-    elif conf >= 0.44:
+    elif conf >= 0.55:
         return "medium"
     return "low"
 
@@ -112,8 +112,11 @@ class BetBrainPipeline:
                     if k not in stats_cache[away]:
                         stats_cache[away][k] = v
 
-            home_stats = stats_cache[home]
-            away_stats = stats_cache[away]
+            h2h = self.advanced.get_h2h(home, away)
+            home_stats = dict(stats_cache[home])
+            home_stats["h2h"] = h2h
+            away_stats = dict(stats_cache[away])
+            away_stats["h2h"] = h2h
 
             # Odds
             live = live_odds_map.get((home, away)) or live_odds_map.get((away, home))
@@ -205,17 +208,17 @@ class BetBrainPipeline:
             # Should-bet thresholds
             should_bet_ml = (
                 ml_edge >= 0.03
-                and consensus.ml_confidence >= 0.45
+                and consensus.ml_confidence >= 0.55
                 and consensus.ml_pick != "skip"
             )
             should_bet_over = (
                 over_edge >= 0.03
-                and consensus.ou_confidence >= 0.45
+                and consensus.ou_confidence >= 0.55
                 and consensus.ou_pick == "over"
             )
             should_bet_under = (
                 under_edge >= 0.03
-                and consensus.ou_confidence >= 0.45
+                and consensus.ou_confidence >= 0.55
                 and consensus.ou_pick == "under"
             )
 

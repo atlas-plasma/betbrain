@@ -72,11 +72,77 @@ class FormAgent(BaseAgent):
         over_lean = avg_gf / league_avg_total   # > 1.0 means high-scoring matchup
 
         if over_lean >= 1.08:
-            ou_pick, ou_conf = "over", min(0.75, 0.5 + (over_lean - 1.0) * 2)
+            over_prob_base = min(0.75, 0.5 + (over_lean - 1.0) * 2)
         elif over_lean <= 0.92:
-            ou_pick, ou_conf = "under", min(0.75, 0.5 + (1.0 - over_lean) * 2)
+            over_prob_base = max(0.25, 0.5 - (1.0 - over_lean) * 2)
         else:
-            ou_pick, ou_conf = "skip", 0.5
+            over_prob_base = 0.5
+
+        # -- Style-based O/U signal --
+        home_style = home_stats.get("style", "balanced")
+        away_style = away_stats.get("style", "balanced")
+
+        style_adj = 0.0
+        if home_style == "defensive" and away_style == "defensive":
+            style_adj = -0.12   # strong under signal
+        elif (home_style == "defensive" and away_style == "balanced") or \
+             (home_style == "balanced" and away_style == "defensive"):
+            style_adj = -0.06   # mild under signal
+        elif (home_style == "high_scoring" and away_style == "high_scoring") or \
+             (home_style == "offensive" and away_style == "struggling") or \
+             (home_style == "struggling" and away_style == "offensive"):
+            style_adj = +0.08   # over signal
+        elif (home_style == "offensive" and away_style == "defensive") or \
+             (home_style == "defensive" and away_style == "offensive"):
+            style_adj = 0.0     # cancel out → neutral
+
+        over_prob_base += style_adj
+
+        # -- O/U historical hit rate signal --
+        home_ou = home_stats.get("ou_hit_rate", {})
+        away_ou = away_stats.get("ou_hit_rate", {})
+        home_sample = home_ou.get("sample", 0)
+        away_sample = away_ou.get("sample", 0)
+
+        if home_sample >= 5 and away_sample >= 5:
+            avg_over_pct = (home_ou.get("over_pct", 0.5) + away_ou.get("over_pct", 0.5)) / 2
+            if avg_over_pct > 0.65:
+                over_prob_base += 0.06
+            elif avg_over_pct < 0.35:
+                over_prob_base -= 0.06
+        elif home_sample >= 5:
+            avg_over_pct = home_ou.get("over_pct", 0.5)
+            if avg_over_pct > 0.65:
+                over_prob_base += 0.06
+            elif avg_over_pct < 0.35:
+                over_prob_base -= 0.06
+        elif away_sample >= 5:
+            avg_over_pct = away_ou.get("over_pct", 0.5)
+            if avg_over_pct > 0.65:
+                over_prob_base += 0.06
+            elif avg_over_pct < 0.35:
+                over_prob_base -= 0.06
+
+        # -- Team tier for O/U: elite vs struggling → over signal --
+        home_tier = home_stats.get("tier", "contender")
+        away_tier = away_stats.get("tier", "contender")
+        if (home_tier == "elite" and away_tier == "struggling") or \
+           (home_tier == "struggling" and away_tier == "elite"):
+            over_prob_base += 0.04
+
+        # Clamp and derive pick
+        over_prob_base = max(0.05, min(0.95, over_prob_base))
+        under_prob_base = 1.0 - over_prob_base
+
+        if over_prob_base >= 0.58:
+            ou_pick = "over"
+            ou_conf = over_prob_base
+        elif under_prob_base >= 0.58:
+            ou_pick = "under"
+            ou_conf = under_prob_base
+        else:
+            ou_pick = "skip"
+            ou_conf = max(over_prob_base, under_prob_base)
 
         # ML vote — require at least 5% separation
         if home_win - away_win >= 0.05:
@@ -94,10 +160,11 @@ class FormAgent(BaseAgent):
         away_pp = away_stats.get("powerplay_pct", 20)
 
         reasoning = (
-            f"Form: {home} W%={home_wr:.0%} PP={home_pp}% GF/G={home_gf:.2f} (home). "
-            f"{away} W%={away_wr:.0%} PP={away_pp}% GF/G={away_gf:.2f} (away). "
+            f"Form: {home} ({home_tier}) W%={home_wr:.0%} PP={home_pp}% GF/G={home_gf:.2f} style={home_style} (home). "
+            f"{away} ({away_tier}) W%={away_wr:.0%} PP={away_pp}% GF/G={away_gf:.2f} style={away_style} (away). "
             f"Form scores {home_score:.2f} vs {away_score:.2f}. "
-            f"Expected total {avg_gf:.1f} goals (line {ou_line})."
+            f"Expected total {avg_gf:.1f} goals (line {ou_line}). "
+            f"Style adj={style_adj:+.2f}, O/U over_prob={over_prob_base:.2f}."
         )
 
         return AgentVote(
@@ -108,6 +175,6 @@ class FormAgent(BaseAgent):
             ou_confidence=round(ou_conf, 4),
             home_win_prob=round(home_win, 4),
             away_win_prob=round(away_win, 4),
-            over_prob=round(min(0.95, ou_conf if ou_pick == "over" else 1 - ou_conf), 4),
+            over_prob=round(over_prob_base, 4),
             reasoning=reasoning,
         )

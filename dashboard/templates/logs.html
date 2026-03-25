@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BetBrain — System Logs</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+        :root {
+            --brand: #CF4E2E; --brand-light: #F5E6E2; --brand-mid: #E8917D;
+            --bg: #F9F7F4; --surface: #FFFFFF; --surface2: #F3F1EE;
+            --border: #E5E2DC; --text: #1A1816; --text2: #6B6560; --text3: #A09A94;
+            --success: #2D7A4F; --success-bg: #E8F5EE;
+            --danger: #C0392B; --danger-bg: #FDE8E8;
+            --warning: #92660A; --warning-bg: #FEF3CD;
+            --info: #1A5A8A; --info-bg: #E3F0FA;
+            --shadow-sm: 0 1px 3px rgba(0,0,0,0.06); --shadow: 0 4px 12px rgba(0,0,0,0.07);
+            --radius: 10px;
+        }
+        body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; line-height: 1.5; }
+
+        /* Nav */
+        nav { background: var(--surface); border-bottom: 1px solid var(--border); padding: 0 2rem; display: flex; justify-content: space-between; align-items: center; height: 56px; position: sticky; top: 0; z-index: 100; box-shadow: var(--shadow-sm); }
+        .logo { font-size: 1.1rem; font-weight: 700; color: var(--brand); letter-spacing: -0.02em; display: flex; align-items: center; gap: 0.5rem; }
+        .nav-links { display: flex; gap: 0.25rem; }
+        .nav-links a { padding: 0.4rem 0.85rem; border-radius: 6px; color: var(--text2); text-decoration: none; font-size: 0.875rem; font-weight: 500; transition: all 0.15s; }
+        .nav-links a:hover { background: var(--surface2); color: var(--text); }
+        .nav-links a.active { background: var(--brand-light); color: var(--brand); }
+
+        /* Layout */
+        .container { max-width: 1100px; margin: 0 auto; padding: 1.75rem 2rem; }
+        .page-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1.5rem; flex-wrap: wrap; gap: 1rem; }
+        .page-title { font-size: 1.4rem; font-weight: 700; letter-spacing: -0.02em; }
+        .subtitle { color: var(--text2); font-size: 0.875rem; margin-top: 0.25rem; }
+
+        /* Filter bar */
+        .filter-bar { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 0.875rem 1.25rem; display: flex; gap: 0.75rem; align-items: center; margin-bottom: 1.75rem; box-shadow: var(--shadow-sm); flex-wrap: wrap; }
+        .filter-bar label { font-size: 0.8rem; font-weight: 600; color: var(--text2); text-transform: uppercase; letter-spacing: 0.05em; white-space: nowrap; }
+        .hours-btns { display: flex; gap: 0.35rem; flex-wrap: wrap; }
+        .hours-btn { padding: 0.35rem 0.8rem; border: 1px solid var(--border); border-radius: 6px; font-size: 0.82rem; font-weight: 500; color: var(--text2); background: var(--bg); text-decoration: none; transition: all 0.15s; cursor: pointer; }
+        .hours-btn:hover { background: var(--surface2); color: var(--text); }
+        .hours-btn.active { background: var(--brand); color: white; border-color: var(--brand); }
+        .refresh-info { margin-left: auto; font-size: 0.78rem; color: var(--text3); display: flex; align-items: center; gap: 0.5rem; }
+        .dot-live { width: 7px; height: 7px; border-radius: 50%; background: var(--success); display: inline-block; animation: pulse 2s infinite; }
+        @keyframes pulse { 0%,100% { opacity:1; } 50% { opacity: 0.3; } }
+
+        /* Summary pills */
+        .summary-pills { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+        .pill { background: var(--surface2); border: 1px solid var(--border); padding: 0.3rem 0.75rem; border-radius: 20px; font-size: 0.78rem; color: var(--text2); }
+        .pill strong { color: var(--text); }
+        .pill.error-pill { background: var(--danger-bg); border-color: rgba(192,57,43,0.2); color: var(--danger); }
+        .pill.error-pill strong { color: var(--danger); }
+        .pill.warn-pill { background: var(--warning-bg); border-color: rgba(146,102,10,0.2); color: var(--warning); }
+        .pill.warn-pill strong { color: var(--warning); }
+
+        /* Empty state */
+        .empty { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 3rem 2rem; text-align: center; color: var(--text2); }
+        .empty-icon { font-size: 2rem; margin-bottom: 0.75rem; }
+        .empty p { font-size: 0.95rem; font-weight: 500; margin-bottom: 0.4rem; }
+        .empty small { font-size: 0.8rem; color: var(--text3); }
+
+        /* Log feed */
+        .log-feed { display: flex; flex-direction: column; gap: 0; }
+        .log-entry { background: var(--surface); border: 1px solid var(--border); border-radius: 0; border-bottom: none; padding: 0.7rem 1rem; display: flex; gap: 0.85rem; align-items: flex-start; transition: background 0.1s; }
+        .log-feed .log-entry:first-child { border-radius: var(--radius) var(--radius) 0 0; }
+        .log-feed .log-entry:last-child { border-radius: 0 0 var(--radius) var(--radius); border-bottom: 1px solid var(--border); }
+        .log-feed .log-entry:only-child { border-radius: var(--radius); border-bottom: 1px solid var(--border); }
+        .log-entry:hover { background: var(--surface2); }
+        .log-entry.level-error { border-left: 3px solid var(--danger); }
+        .log-entry.level-warning { border-left: 3px solid #D4A017; }
+        .log-entry.level-info { border-left: 3px solid transparent; }
+
+        .log-ts { font-size: 0.72rem; color: var(--text3); white-space: nowrap; font-family: 'SF Mono', 'Menlo', monospace; min-width: 132px; padding-top: 1px; }
+        .log-badges { display: flex; gap: 0.35rem; align-items: center; min-width: 160px; flex-wrap: wrap; }
+        .badge { display: inline-flex; align-items: center; padding: 0.12rem 0.45rem; border-radius: 4px; font-size: 0.67rem; font-weight: 700; white-space: nowrap; letter-spacing: 0.02em; }
+        .badge-info    { background: var(--info-bg); color: var(--info); }
+        .badge-warning { background: var(--warning-bg); color: var(--warning); }
+        .badge-error   { background: var(--danger-bg); color: var(--danger); }
+        .badge-component { background: var(--surface2); color: var(--text2); border: 1px solid var(--border); }
+
+        .log-body { flex: 1; min-width: 0; }
+        .log-message { font-size: 0.85rem; color: var(--text); font-weight: 500; word-break: break-word; }
+        .log-entry.level-error .log-message { color: var(--danger); }
+        .log-entry.level-warning .log-message { color: var(--warning); }
+
+        /* Expandable traceback */
+        .traceback-toggle { margin-top: 0.4rem; font-size: 0.72rem; color: var(--brand); cursor: pointer; user-select: none; display: inline-flex; align-items: center; gap: 0.3rem; font-weight: 600; }
+        .traceback-toggle:hover { text-decoration: underline; }
+        .traceback-body { display: none; margin-top: 0.5rem; background: #1E1E1E; color: #CE9178; border-radius: 6px; padding: 0.75rem 1rem; font-family: 'SF Mono', 'Menlo', monospace; font-size: 0.72rem; line-height: 1.6; white-space: pre-wrap; word-break: break-all; overflow-x: auto; max-height: 300px; overflow-y: auto; }
+        .traceback-body.open { display: block; }
+
+        footer { text-align: center; padding: 2rem; color: var(--text3); font-size: 0.78rem; border-top: 1px solid var(--border); margin-top: 2rem; }
+    </style>
+</head>
+<body>
+<nav>
+    <div class="logo">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="#CF4E2E" stroke-width="2"/><path d="M8 12l3 3 5-5" stroke="#CF4E2E" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        BetBrain
+    </div>
+    <div class="nav-links">
+        <a href="/">Analysis</a>
+        <a href="/backtest">Backtest</a>
+        <a href="/paper">Paper Trade</a>
+        <a href="/audit">Audit</a>
+        <a href="/logs" class="active">Logs</a>
+    </div>
+</nav>
+
+<div class="container">
+    <div class="page-header">
+        <div>
+            <div class="page-title">System Logs</div>
+            <div class="subtitle">Full scheduler audit trail — every pipeline run, bet placement, and error</div>
+        </div>
+        {% set error_count = entries | selectattr('level', 'equalto', 'ERROR') | list | length %}
+        {% set warn_count  = entries | selectattr('level', 'equalto', 'WARNING') | list | length %}
+        <div class="summary-pills">
+            <span class="pill"><strong>{{ entries | length }}</strong> entries</span>
+            {% if error_count > 0 %}
+            <span class="pill error-pill"><strong>{{ error_count }}</strong> error{{ 's' if error_count != 1 else '' }}</span>
+            {% endif %}
+            {% if warn_count > 0 %}
+            <span class="pill warn-pill"><strong>{{ warn_count }}</strong> warning{{ 's' if warn_count != 1 else '' }}</span>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Filter bar -->
+    <div class="filter-bar">
+        <label>Time window</label>
+        <div class="hours-btns">
+            <a href="/logs?hours=6"  class="hours-btn {{ 'active' if hours == 6 else '' }}">6h</a>
+            <a href="/logs?hours=24" class="hours-btn {{ 'active' if hours == 24 else '' }}">24h</a>
+            <a href="/logs?hours=48" class="hours-btn {{ 'active' if hours == 48 else '' }}">48h</a>
+            <a href="/logs?hours=168" class="hours-btn {{ 'active' if hours == 168 else '' }}">7d</a>
+        </div>
+        <div class="refresh-info">
+            <span class="dot-live"></span>
+            Auto-refresh every 30s
+        </div>
+    </div>
+
+    {% if not entries %}
+    <div class="empty">
+        <div class="empty-icon">&#x1F4CB;</div>
+        <p>No log entries in the last {{ hours }}h</p>
+        <small>The scheduler logs every action here. If this is empty, the scheduler has not run yet or the log table is new.</small>
+    </div>
+
+    {% else %}
+    <div class="log-feed" id="logFeed">
+        {% for entry in entries %}
+        {% set lvl = entry.level | lower %}
+        <div class="log-entry level-{{ lvl }}">
+            <span class="log-ts">{{ entry.logged_at | replace('T', ' ') }}</span>
+            <div class="log-badges">
+                <span class="badge badge-{{ lvl }}">{{ entry.level }}</span>
+                <span class="badge badge-component">{{ entry.component }}</span>
+            </div>
+            <div class="log-body">
+                <div class="log-message">{{ entry.message }}</div>
+                {% if entry.details %}
+                <span class="traceback-toggle" onclick="toggleTraceback(this)">&#x25B6; Show traceback</span>
+                <pre class="traceback-body">{{ entry.details }}</pre>
+                {% endif %}
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+</div>
+
+<footer>BetBrain — Simulation only. No real money involved. Gamble responsibly.</footer>
+
+<script>
+function toggleTraceback(el) {
+    const pre = el.nextElementSibling;
+    const open = pre.classList.toggle('open');
+    el.textContent = (open ? '\u25BC Hide traceback' : '\u25B6 Show traceback');
+}
+
+// Auto-refresh every 30 seconds
+setTimeout(function() { window.location.reload(); }, 30000);
+</script>
+</body>
+</html>

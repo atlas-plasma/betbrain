@@ -36,6 +36,7 @@ from data.historical import HistoricalNHL
 from data.nhl import NHLDataFetcher
 from cache.odds_store import settle_game
 from cache.inference_log import log_inference
+import cache.system_log as syslog
 
 
 STRATEGY        = os.environ.get("AUTO_STRATEGY", "value")
@@ -62,6 +63,8 @@ def place_bets_for_game(opp_group: List[Dict]) -> List[Dict]:
     if any(o.get("odds_source") in (None, "fallback") for o in opp_group):
         match = opp_group[0].get("match", "?")
         print(f"  [skip] {match} — no real odds available")
+        syslog.info("placement", f"Skipping {match} — no real odds")
+        log_inference(opp_group, set())   # still record the analysis
         return []
 
     placed = []
@@ -75,6 +78,7 @@ def place_bets_for_game(opp_group: List[Dict]) -> List[Dict]:
             continue
         seen.add(key)
 
+        syslog.info("placement", f"Placing bet: {o['match']} | {o['market']} @ {o['odds']:.2f} | pick={o.get('win_pick','?')} edge={o.get('edge',0)*100:.1f}%")
         bet = trader.place_bet(
             match      = o["match"],
             market     = o["market"],
@@ -95,6 +99,8 @@ def place_bets_for_game(opp_group: List[Dict]) -> List[Dict]:
         placed_keys.add((o["match"], o["market"]))
         placed.append(bet)
 
+    if not placed:
+        syslog.info("placement", f"No value bets for {opp_group[0].get('match','?')} — strategy={STRATEGY}")
     log_inference(opp_group, placed_keys)
     return placed
 
@@ -105,6 +111,7 @@ def place_todays_bets() -> List[Dict]:
     opportunities (ignores per-game timing — useful for testing or
     catching up if the scheduler missed a window).
     """
+    syslog.info("scheduler", f"Manual place triggered — strategy={STRATEGY}")
     print(f"[auto_trade] Manual place — strategy={STRATEGY}")
     now     = datetime.now()
     cutoff  = now + timedelta(hours=36)
@@ -125,6 +132,7 @@ def place_todays_bets() -> List[Dict]:
                 return False
 
         opps_today = [o for o in opps if _upcoming(o)]
+        syslog.info("scheduler", f"Pipeline returned {len(opps)} opportunities, {len(opps_today)} upcoming")
 
         if not opps_today:
             print(f"[auto_trade] No upcoming games in next 36h")
@@ -143,7 +151,7 @@ def place_todays_bets() -> List[Dict]:
         return placed
 
     except Exception as e:
-        print(f"[auto_trade] ERROR: {e}")
+        syslog.error("scheduler", f"place_todays_bets failed: {e}", e)
         import traceback; traceback.print_exc()
         return []
 
@@ -160,6 +168,7 @@ def settle_pending_bets() -> List[Dict]:
     """
     trader  = get_paper_trader()
     pending = trader.get_pending_bets()
+    syslog.info("settlement", f"Settlement triggered — {len(pending)} pending bets")
 
     if not pending:
         print("[auto_trade] No pending bets to settle")
@@ -228,6 +237,7 @@ def settle_pending_bets() -> List[Dict]:
         outcome = "WON ✓" if won else "LOST ✗"
         print(f"  [settle] {match} | {market} → {outcome} "
               f"(score {game['home_score']}-{game['away_score']})")
+        syslog.info("settlement", f"Settled {match} | {market} → {'WON' if won else 'LOST'}")
         settled.append(result)
 
         # Persist final score for future backtesting
@@ -239,6 +249,7 @@ def settle_pending_bets() -> List[Dict]:
             pass
 
     print(f"[auto_trade] Settled {len(settled)} bets")
+    syslog.info("settlement", f"Settlement complete — {len(settled)} bets settled")
     return settled
 
 
@@ -292,23 +303,34 @@ def check_and_place_due_bets() -> List[Dict]:
         if not due_games:
             return []
 
+        syslog.info("scheduler", f"Scheduler tick — {len(due_games)} game(s) due for betting")
+
         # Run pipeline once and filter to due games
         pipeline = BetBrainPipeline()
         all_opps = pipeline.run(days=1)
+        syslog.info("scheduler", f"Pipeline complete — {len(all_opps)} opportunities found")
+
+        # Log ALL opportunities now — so every run is in the audit trail
+        # even if no bets end up being placed
+        log_inference(all_opps, set())
 
         placed = []
         for game in due_games:
             match_key = f"{game['away_team']} @ {game['home_team']}"
+            syslog.info("scheduler", f"Bet window open: {match_key} (T-{MINUTES_BEFORE}min)")
             print(f"[auto_trade] Bet window open: {match_key} "
                   f"(T-{MINUTES_BEFORE}min)")
             group = [o for o in all_opps if o.get("match") == match_key
-                     and o.get("date") == today]
+                     and o.get("date") == game_date]
             placed.extend(place_bets_for_game(group))
 
         return placed
 
     except Exception as e:
+        syslog.error("scheduler", f"check_and_place_due_bets failed: {e}", e)
+        import traceback
         print(f"[auto_trade] check_and_place error: {e}")
+        traceback.print_exc()
         return []
 
 

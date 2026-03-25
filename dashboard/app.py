@@ -26,6 +26,7 @@ from strategy.selector import StrategySelector
 import cache.backtest_cache as backtest_cache
 from auto_trade import place_todays_bets, settle_pending_bets, check_and_place_due_bets
 from cache.inference_log import get_recent as get_inference_log
+import cache.system_log as syslog
 
 app = Flask(__name__)
 app.jinja_env.globals['enumerate'] = enumerate
@@ -49,14 +50,17 @@ def _run_scheduler():
             try:
                 settle_pending_bets()
             except Exception as e:
+                syslog.error("scheduler", f"settle error: {e}", e)
                 print(f"[scheduler] settle error: {e}")
             last_settle = date
+            syslog.info("scheduler", f"Daily settlement run complete for {date}")
 
         # Every minute — check if any game's bet window just opened
         # (90 min before each game's scheduled start time)
         try:
             check_and_place_due_bets()
         except Exception as e:
+            syslog.error("scheduler", f"place error: {e}", e)
             print(f"[scheduler] place error: {e}")
 
         time.sleep(60)  # tick every minute
@@ -314,6 +318,21 @@ def audit():
 def api_inference_recent():
     hours = int(request.args.get('hours', 24))
     return jsonify(get_inference_log(hours=hours))
+
+
+@app.route('/logs')
+def logs_page():
+    from cache.system_log import get_recent as get_sys_log
+    hours = int(request.args.get('hours', 48))
+    entries = get_sys_log(hours=hours)
+    return render_template('logs.html', entries=entries, hours=hours)
+
+
+@app.route('/api/logs/recent')
+def api_logs_recent():
+    from cache.system_log import get_recent as get_sys_log
+    hours = int(request.args.get('hours', 24))
+    return jsonify(get_sys_log(hours=hours))
 
 
 if __name__ == '__main__':

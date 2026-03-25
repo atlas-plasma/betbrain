@@ -127,7 +127,7 @@ def _kelly_stake(model_prob: float, odds: float) -> float:
 def _tier(conf: float) -> str:
     if conf >= 0.60:
         return "high"
-    elif conf >= 0.44:
+    elif conf >= 0.55:
         return "medium"
     return "low"
 

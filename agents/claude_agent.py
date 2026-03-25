@@ -35,6 +35,46 @@ def _build_prompt(home, away, home_stats, away_stats, ou_line):
             f"SV%={stats.get('save_pct',0.910):.3f}"
         )
 
+    # -- Tier, style, O/U context --
+    home_tier  = home_stats.get("tier", "unknown")
+    away_tier  = away_stats.get("tier", "unknown")
+    home_style = home_stats.get("style", "balanced")
+    away_style = away_stats.get("style", "balanced")
+
+    home_ou      = home_stats.get("ou_hit_rate", {})
+    away_ou      = away_stats.get("ou_hit_rate", {})
+    home_over_pct  = home_ou.get("over_pct", 0.5)
+    away_over_pct  = away_ou.get("over_pct", 0.5)
+    home_avg_total = home_ou.get("avg_total", 5.8)
+    away_avg_total = away_ou.get("avg_total", 5.8)
+
+    combined_over_pct = (home_over_pct + away_over_pct) / 2
+    ou_trend = "over" if combined_over_pct > 0.55 else ("under" if combined_over_pct < 0.45 else "neutral")
+
+    tier_style_block = (
+        f"\nTEAM TIERS & STYLE:\n"
+        f"  {home} (home): tier={home_tier}, style={home_style}, "
+        f"O/U last 10: {home_over_pct:.0%} over (avg {home_avg_total:.1f} goals)\n"
+        f"  {away} (away): tier={away_tier}, style={away_style}, "
+        f"O/U last 10: {away_over_pct:.0%} over (avg {away_avg_total:.1f} goals)\n"
+        f"\nMATCHUP CONTEXT:\n"
+        f"  - {home} is {home_tier}, {away} is {away_tier}\n"
+        f"  - Style clash: {home_style} vs {away_style}\n"
+        f"  - Recent O/U trends favour: {ou_trend}"
+    )
+
+    h2h = home_stats.get("h2h", {})
+    h2h_sample = h2h.get("sample", 0)
+    if h2h_sample >= 1:
+        h2h_block = (
+            f"\nHEAD-TO-HEAD (this season, {h2h_sample} games):\n"
+            f"  {home} wins: {h2h.get('home_wins', 0)}, {away} wins: {h2h.get('away_wins', 0)} "
+            f"(avg total: {h2h.get('avg_total', 5.8):.1f} goals)\n"
+            f"  H2H dominance: {'strong' if h2h.get('home_win_pct', 0.5) >= 0.67 else 'slight' if h2h.get('home_win_pct', 0.5) >= 0.55 else 'even' if h2h.get('home_win_pct', 0.5) >= 0.45 else 'slight (away favoured)' if h2h.get('home_win_pct', 0.5) >= 0.33 else 'strong (away favoured)'} for {home}"
+        )
+    else:
+        h2h_block = "\nHEAD-TO-HEAD: No games played yet this season."
+
     return f"""You are an expert NHL sports betting analyst. Analyze this matchup and give your best prediction.
 
 MATCHUP: {away} (away) @ {home} (home)
@@ -43,6 +83,8 @@ O/U LINE: {ou_line}
 TEAM STATS (current season):
 {fmt(home, home_stats, "home")}
 {fmt(away, away_stats, "away")}
+{tier_style_block}
+{h2h_block}
 
 Answer ONLY with a JSON object in this exact format (no markdown, no extra text):
 {{
@@ -59,6 +101,8 @@ Answer ONLY with a JSON object in this exact format (no markdown, no extra text)
 Rules:
 - ml_confidence / ou_confidence: 0.5 = coin flip, only >0.75 if very confident
 - home_win_prob + away_win_prob must sum to ~1.0
+- Consider tier matchup, style clash, and historical O/U trends in your reasoning
+- Use H2H record as tiebreaker when win probabilities are close
 - Be concise and specific in reasoning"""
 
 

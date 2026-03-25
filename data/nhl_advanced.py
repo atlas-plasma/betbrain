@@ -11,7 +11,7 @@ Results are cached per session to minimise API calls.
 
 import requests
 from datetime import datetime, timedelta
-from typing import Dict, Optional
+from typing import Dict, Optional, Tuple
 
 LEAGUE_AVG_SV  = 0.908   # NHL 2024-25 league average save %
 LEAGUE_AVG_SH  = 0.097   # NHL 2024-25 league average shooting %
@@ -31,6 +31,8 @@ class NHLAdvancedStats:
         self._club_stats_cache: Dict[str, Dict] = {}
         self._schedule_cache:   Dict[str, list] = {}
         self._standings_cache:  Dict[str, Dict] = {}
+        self._ou_cache:         Dict[str, Dict] = {}
+        self._h2h_cache:        Dict[tuple, Dict] = {}
 
     # ------------------------------------------------------------------ #
     # Public interface
@@ -106,6 +108,13 @@ class NHLAdvancedStats:
         pp_pct = base.get("powerplay_pct", club.get("pp_pct", 20))
         pk_pct = base.get("penalty_kill_pct", club.get("pk_pct", 80))
 
+        # -- Tier, style, and O/U hit rate --
+        gf_avg = blended_gf
+        ga_avg = blended_ga
+        tier        = self._get_team_tier(full_wr)
+        style       = self._get_team_style(gf_avg, ga_avg)
+        ou_hit_rate = self._get_ou_hit_rate(team_abbr, 5.5)
+
         return {
             # Existing fields (compatibility with base pipeline)
             "team": team_abbr,
@@ -148,6 +157,11 @@ class NHLAdvancedStats:
             # Raw numbers for debugging
             "full_gf": round(full_gf, 3),
             "full_ga": round(full_ga, 3),
+
+            # Tier, style, O/U hit rate
+            "tier":        tier,
+            "style":       style,
+            "ou_hit_rate": ou_hit_rate,
         }
 
     def enrich_historical(self, team_abbr: str, game_date: str, standings: Dict) -> Dict:
@@ -215,6 +229,11 @@ class NHLAdvancedStats:
         pp_pct = base.get("powerplay_pct", 20)
         pk_pct = base.get("penalty_kill_pct", 80)
 
+        # -- Tier and style (no live O/U lookup for historical) --
+        tier  = self._get_team_tier(full_wr)
+        style = self._get_team_style(blended_gf, blended_ga)
+        _default_ou = {"over_pct": 0.5, "under_pct": 0.5, "avg_total": 5.8, "sample": 0}
+
         return {
             "team":              team_abbr,
             "games_played":      full_gp,
@@ -249,11 +268,134 @@ class NHLAdvancedStats:
             "b2b_is_home":       b2b_home,
             "full_gf":           round(full_gf, 3),
             "full_ga":           round(full_ga, 3),
+            # Tier, style, O/U hit rate (default for historical)
+            "tier":        tier,
+            "style":       style,
+            "ou_hit_rate": _default_ou,
         }
 
     # ------------------------------------------------------------------ #
     # Internal helpers
     # ------------------------------------------------------------------ #
+
+    @staticmethod
+    def _get_team_tier(win_rate: float) -> str:
+        if win_rate >= 0.60:
+            return "elite"
+        elif win_rate >= 0.50:
+            return "contender"
+        elif win_rate >= 0.44:
+            return "bubble"
+        return "struggling"
+
+    @staticmethod
+    def _get_team_style(gf_avg: float, ga_avg: float) -> str:
+        if gf_avg >= 3.4 and ga_avg >= 3.2:
+            return "high_scoring"
+        elif gf_avg >= 3.4 and ga_avg < 3.2:
+            return "offensive"
+        elif gf_avg < 3.0 and ga_avg < 3.0:
+            return "defensive"
+        return "balanced"
+
+    def _get_ou_hit_rate(self, team: str, ou_line: float = 5.5) -> dict:
+        """Fetch last 10 completed games and compute O/U hit rate."""
+        _default = {"over_pct": 0.5, "under_pct": 0.5, "avg_total": 5.8, "sample": 0}
+        cache_key = (team, ou_line)
+        if cache_key in self._ou_cache:
+            return self._ou_cache[cache_key]
+        try:
+            r = self.session.get(
+                f"{self.BASE}/v1/club-schedule-season/{team}/now", timeout=8
+            )
+            if r.status_code != 200:
+                return _default
+            games = r.json().get("games", [])
+            completed = [
+                g for g in games
+                if g.get("gameState") in ("OFF", "FINAL")
+            ]
+            last10 = completed[-10:]
+            if not last10:
+                return _default
+            totals = [
+                g.get("homeTeam", {}).get("score", 0) + g.get("awayTeam", {}).get("score", 0)
+                for g in last10
+            ]
+            over_count  = sum(1 for t in totals if t > ou_line)
+            under_count = sum(1 for t in totals if t < ou_line)
+            n = len(totals)
+            result = {
+                "over_pct":  round(over_count / n, 4),
+                "under_pct": round(under_count / n, 4),
+                "avg_total": round(sum(totals) / n, 2),
+                "sample":    n,
+            }
+            self._ou_cache[cache_key] = result
+            return result
+        except Exception as e:
+            print(f"  [adv] ou-hit-rate error {team}: {e}")
+            return _default
+
+    def get_h2h(self, home: str, away: str) -> Dict:
+        """Return head-to-head record between home and away teams this season."""
+        _default = {
+            "h2h_games": 0, "home_wins": 0, "away_wins": 0,
+            "home_win_pct": 0.5, "avg_total": 5.8, "sample": 0,
+        }
+        cache_key = (home, away)
+        if cache_key in self._h2h_cache:
+            return self._h2h_cache[cache_key]
+        try:
+            games = self._get_team_schedule(home)
+            completed = [
+                g for g in games
+                if g.get("gameState") in ("OFF", "FINAL")
+            ]
+            h2h_games = []
+            for g in completed:
+                h_team = g.get("homeTeam", {}).get("abbrev", "")
+                a_team = g.get("awayTeam", {}).get("abbrev", "")
+                if away not in (h_team, a_team):
+                    continue
+                h2h_games.append(g)
+
+            if not h2h_games:
+                self._h2h_cache[cache_key] = _default
+                return _default
+
+            home_wins = 0
+            away_wins = 0
+            totals = []
+            for g in h2h_games:
+                h_team = g.get("homeTeam", {}).get("abbrev", "")
+                a_team = g.get("awayTeam", {}).get("abbrev", "")
+                h_score = g.get("homeTeam", {}).get("score", 0)
+                a_score = g.get("awayTeam", {}).get("score", 0)
+                if h_team == home:
+                    won = h_score > a_score
+                else:
+                    won = a_score > h_score
+                if won:
+                    home_wins += 1
+                else:
+                    away_wins += 1
+                totals.append(h_score + a_score)
+
+            n = len(h2h_games)
+            result = {
+                "h2h_games":    n,
+                "home_wins":    home_wins,
+                "away_wins":    away_wins,
+                "home_win_pct": round(home_wins / n, 4) if n > 0 else 0.5,
+                "avg_total":    round(sum(totals) / n, 2) if totals else 5.8,
+                "sample":       n,
+            }
+            self._h2h_cache[cache_key] = result
+            return result
+        except Exception as e:
+            print(f"  [adv] h2h error {home}/{away}: {e}")
+            return _default
 
     def _get_club_stats(self, abbrev: str) -> Dict:
         if abbrev in self._club_stats_cache:

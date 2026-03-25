@@ -65,7 +65,7 @@ def _keyword_severity(text: str, team: str) -> float:
 
 
 def _build_parse_prompt(home: str, away: str, search_results: str) -> str:
-    return f"""You are an NHL injury analyst. Based on these search results, identify any significant injuries or lineup changes for {home} or {away}.
+    return f"""You are an NHL injury analyst. Based on these search results, identify any significant injuries or lineup changes for {home} or {away}. Also identify starting goalie confirmations if mentioned.
 
 SEARCH RESULTS:
 {search_results[:2000]}
@@ -75,7 +75,13 @@ Respond ONLY with JSON:
   "{home}_penalty": 0.0-0.20,
   "{away}_penalty": 0.0-0.20,
   "home_notes": "brief description of any issues",
-  "away_notes": "brief description of any issues"
+  "away_notes": "brief description of any issues",
+  "home_goalie_confirmed": "name or unknown",
+  "away_goalie_confirmed": "name or unknown",
+  "home_goalie_note": "brief note",
+  "away_goalie_note": "brief note",
+  "home_injury_type": "none|offensive|defensive|goalie",
+  "away_injury_type": "none|offensive|defensive|goalie"
 }}
 
 Penalty scale:
@@ -84,6 +90,8 @@ Penalty scale:
 - 0.10 = top-line player or top pairing defender out
 - 0.15 = starting goalie questionable/out
 - 0.20 = multiple significant players or starting goalie confirmed out
+
+injury_type: 'defensive' if the injured player anchors defence/PK/zone structure (shifts O/U toward under), 'offensive' if top-line scorer/PP quarterback (reduces over confidence), 'goalie' if starting goalie, 'none' if no significant injury
 
 Return 0.0 if nothing found. Be conservative."""
 
@@ -148,10 +156,21 @@ class ResearchAgent(BaseAgent):
         # --- Web search for injuries ---
         search_text = self._search_injuries(home, away)
 
+        home_goalie_confirmed = "unknown"
+        away_goalie_confirmed = "unknown"
+        home_goalie_note      = ""
+        away_goalie_note      = ""
+
+        home_injury_type = "none"
+        away_injury_type = "none"
+
         if search_text:
             if self._llm_client:
                 # Use LLM to parse intelligently
-                home_penalty, away_penalty, home_note, away_note = \
+                (home_penalty, away_penalty, home_note, away_note,
+                 home_goalie_confirmed, away_goalie_confirmed,
+                 home_goalie_note, away_goalie_note,
+                 home_injury_type, away_injury_type) = \
                     self._llm_parse(home, away, search_text)
                 if home_note:
                     notes.append(f"{home}: {home_note}")
@@ -201,6 +220,18 @@ class ResearchAgent(BaseAgent):
             ou_pick  = "under"
             ou_conf  = min(0.70, 0.50 + max_penalty * 2)
 
+        # Injury role → O/U directional signal
+        # Defensive stalwart out → leaks goals against → UNDER signal
+        # (goalie already handled above via max_penalty)
+        if home_injury_type == "defensive" and home_penalty >= 0.04:
+            ou_pick = "under"
+            ou_conf = min(0.68, 0.52 + home_penalty)
+            notes.append(f"{home} defensive key player out — under signal")
+        elif away_injury_type == "defensive" and away_penalty >= 0.04:
+            ou_pick = "under"
+            ou_conf = min(0.68, 0.52 + away_penalty)
+            notes.append(f"{away} defensive key player out — under signal")
+
         reasoning = ""
         if notes:
             reasoning = "Research: " + "; ".join(notes) + ". "
@@ -208,6 +239,17 @@ class ResearchAgent(BaseAgent):
             reasoning += f"{home} adj penalty={home_penalty:.0%}. "
         if away_penalty > 0:
             reasoning += f"{away} adj penalty={away_penalty:.0%}. "
+        # Goalie confirmation info
+        if home_goalie_confirmed != "unknown" or home_goalie_note:
+            goalie_str = home_goalie_confirmed
+            if home_goalie_note:
+                goalie_str += f" ({home_goalie_note})"
+            reasoning += f"{home} starter: {goalie_str}. "
+        if away_goalie_confirmed != "unknown" or away_goalie_note:
+            goalie_str = away_goalie_confirmed
+            if away_goalie_note:
+                goalie_str += f" ({away_goalie_note})"
+            reasoning += f"{away} starter: {goalie_str}. "
         if not reasoning:
             reasoning = "No injury concerns found for either team."
 
@@ -232,9 +274,10 @@ class ResearchAgent(BaseAgent):
                 f"NHL {home} {away} injury lineup today",
                 f"NHL {home} injuries scratch",
                 f"NHL {away} injuries scratch",
+                f"NHL {home} {away} starting goalie confirmed tonight",
             ]
             with DDGS() as ddg:
-                for q in queries[:2]:  # limit to 2 queries for speed
+                for q in queries[:3]:  # limit to 3 queries for speed
                     for r in ddg.text(q, max_results=3):
                         results.append(r.get("body", ""))
             return " ".join(results)
@@ -270,20 +313,25 @@ class ResearchAgent(BaseAgent):
         return ""
 
     def _llm_parse(self, home: str, away: str, search_text: str):
-        """Use LLM to parse injury text. Returns (home_pen, away_pen, home_note, away_note)."""
+        """Use LLM to parse injury text.
+        Returns (home_pen, away_pen, home_note, away_note,
+                 home_goalie_confirmed, away_goalie_confirmed,
+                 home_goalie_note, away_goalie_note,
+                 home_injury_type, away_injury_type).
+        """
         prompt = _build_parse_prompt(home, away, search_text)
         try:
             if self._llm_backend == "anthropic":
                 msg = self._llm_client.messages.create(
                     model=self._llm_model,
-                    max_tokens=256,
+                    max_tokens=384,
                     messages=[{"role": "user", "content": prompt}],
                 )
                 raw = msg.content[0].text
             else:
                 resp = self._llm_client.chat.completions.create(
                     model=self._llm_model,
-                    max_tokens=256,
+                    max_tokens=384,
                     temperature=0.1,
                     messages=[{"role": "user", "content": prompt}],
                 )
@@ -300,11 +348,23 @@ class ResearchAgent(BaseAgent):
             away_pen  = float(data.get(f"{away}_penalty", 0.0))
             home_note = data.get("home_notes", "")
             away_note = data.get("away_notes", "")
+            home_goalie_confirmed = data.get("home_goalie_confirmed", "unknown")
+            away_goalie_confirmed = data.get("away_goalie_confirmed", "unknown")
+            home_goalie_note      = data.get("home_goalie_note", "")
+            away_goalie_note      = data.get("away_goalie_note", "")
+            home_inj_type = data.get("home_injury_type", "none")
+            away_inj_type = data.get("away_injury_type", "none")
             return (
                 max(0.0, min(0.25, home_pen)),
                 max(0.0, min(0.25, away_pen)),
                 home_note,
                 away_note,
+                home_goalie_confirmed,
+                away_goalie_confirmed,
+                home_goalie_note,
+                away_goalie_note,
+                home_inj_type,
+                away_inj_type,
             )
         except Exception:
-            return 0.0, 0.0, "", ""
+            return 0.0, 0.0, "", "", "unknown", "unknown", "", "", "none", "none"
