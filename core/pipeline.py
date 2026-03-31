@@ -74,8 +74,8 @@ class BetBrainPipeline:
         # Load standings once for all teams
         standings = self.nhl._load_standings()
 
-        # Batch odds if API available
-        live_odds_map = self._fetch_live_odds_map()
+        # Batch odds — DB first, API only for games not yet stored
+        live_odds_map = self._fetch_live_odds_map(games)
 
         stats_cache: Dict[str, Dict] = {}
         opportunities = []
@@ -327,26 +327,58 @@ class BetBrainPipeline:
         "Washington Capitals": "WSH", "Winnipeg Jets": "WPG",
     }
 
-    def _fetch_live_odds_map(self) -> Dict:
-        """Fetch live odds and return a map keyed by (home_abbrev, away_abbrev).
+    def _fetch_live_odds_map(self, games: List[Dict]) -> Dict:
+        """Return odds map keyed by (home_abbrev, away_abbrev).
 
-        Prefers Betway odds; falls back to any available bookmaker.
-        Converts TheOddsAPI full team names to NHL abbreviations so the
-        lookup matches the abbreviations used throughout the rest of the code.
+        Checks historical_odds DB first for each game.  Only calls
+        TheOddsAPI (once) for games whose odds are not yet stored.
+        Prefers Betway; falls back to any available bookmaker.
         """
-        odds_map = {}
-        if not self.odds_api.has_api():
-            print("  [odds] No ODDS_API_KEY — using synthetic fallback odds")
+        from cache.odds_store import get_odds
+
+        odds_map: Dict = {}
+        missing: List[Dict] = []
+
+        for game in games:
+            home      = game.get("home_team", "")
+            away      = game.get("away_team", "")
+            game_date = game.get("date", "")
+            if not home or not away or not game_date:
+                continue
+            stored = get_odds(game_date, home, away)
+            if stored and stored.get("home_ml"):
+                odds_map[(home, away)] = {
+                    "home_ml": stored["home_ml"],
+                    "away_ml": stored["away_ml"],
+                    "over":    1.909,
+                    "under":   1.909,
+                    "ou_line": stored.get("ou_line") or 6.5,
+                    "book":    stored.get("source", "db"),
+                }
+            else:
+                missing.append(game)
+
+        if not missing:
+            print(f"  [odds] All {len(odds_map)} game(s) loaded from DB — skipping API call")
             return odds_map
+
+        if not self.odds_api.has_api():
+            print(f"  [odds] No ODDS_API_KEY — {len(missing)} game(s) will use fallback odds")
+            return odds_map
+
+        print(f"  [odds] Fetching API odds for {len(missing)} game(s) not yet in DB")
         try:
-            games = self.odds_api.get_market_odds()
+            api_games = self.odds_api.get_market_odds()
             preferred = self.odds_api.PREFERRED_BOOKS
 
-            for game in games:
+            for game in api_games:
                 home_full = game.get("home_team", "")
                 away_full = game.get("away_team", "")
                 home = self._NAME_TO_ABBREV.get(home_full, home_full)
                 away = self._NAME_TO_ABBREV.get(away_full, away_full)
+
+                if (home, away) in odds_map:
+                    continue  # already loaded from DB
 
                 # Sort bookmakers: preferred books first
                 books = sorted(
@@ -372,16 +404,16 @@ class BetBrainPipeline:
                                 if o.get("name") == "Over" and not ou_line:
                                     ou_line = o.get("point")
                     if home_ml and over:
-                        break  # got everything from this book
+                        break
 
                 if home_ml and away_ml:
                     odds_map[(home, away)] = {
-                        "home_ml":   home_ml,
-                        "away_ml":   away_ml,
-                        "over":      over   or 1.909,
-                        "under":     under  or 1.909,
-                        "ou_line":   ou_line or 6.5,
-                        "book":      book_used,
+                        "home_ml": home_ml,
+                        "away_ml": away_ml,
+                        "over":    over   or 1.909,
+                        "under":   under  or 1.909,
+                        "ou_line": ou_line or 6.5,
+                        "book":    book_used,
                     }
                     print(f"    {away} @ {home}: {home_ml}/{away_ml} ({book_used})")
         except Exception as e:

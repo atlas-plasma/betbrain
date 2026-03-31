@@ -2,7 +2,7 @@
 BetBrain Dashboard — multi-agent pipeline
 """
 
-from flask import Flask, render_template, jsonify, request
+from flask import Flask, render_template, jsonify, request, redirect
 import sys, os, threading
 from pathlib import Path
 from datetime import datetime
@@ -88,15 +88,7 @@ STRATEGIES = {
 
 @app.route('/')
 def index():
-    sport = request.args.get('sport', 'nhl')
-    strategy = request.args.get('strategy', 'value')
-
-    # Render the page shell immediately — data loads async via /api/analyze
-    return render_template('index.html',
-                           sport=sport,
-                           strategy=strategy,
-                           strategies=STRATEGIES,
-                           generated=datetime.now().strftime('%Y-%m-%d %H:%M'))
+    return redirect('/paper')
 
 
 @app.route('/backtest')
@@ -142,6 +134,20 @@ def paper_trading():
     pending_matches = {(b["match"], b["market"]) for b in pending}
     bet_placed_matches = {b["match"] for b in pending}
 
+    # Collect matches already analysed today (logged in inference_log)
+    from cache.inference_log import get_recent as get_inf_recent
+    today_inf = get_inf_recent(hours=48, limit=500)
+    # Use the most recent odds_source per match (earlier runs may have had real odds)
+    from collections import defaultdict
+    _latest: dict = {}  # match -> most recent entry
+    for e in today_inf:
+        m = e["match"]
+        if m not in _latest or e.get("logged_at", "") > _latest[m].get("logged_at", ""):
+            _latest[m] = e
+    failed_matches   = {m for m, e in _latest.items()
+                        if e.get("odds_source", "fallback") in ("fallback", "", None)}
+    analysed_matches = {e["match"] for e in today_inf} - failed_matches
+
     schedule_cards = []
     try:
         nhl = NHLDataFetcher()
@@ -165,14 +171,18 @@ def paper_trading():
                     diff     = (bet_dt - now).total_seconds()
                     minutes_until_bet = int(diff / 60)
 
-                    if now > game_dt + timedelta(hours=3):
-                        continue  # game is finished, skip it
+                    if now > game_dt + timedelta(hours=10):
+                        continue  # hide after 10h (well past any game ending)
                     elif match in bet_placed_matches:
                         status_label = "bet_placed"
+                    elif match in failed_matches:
+                        status_label = "failed"        # no real odds available
+                    elif match in analysed_matches:
+                        status_label = "skipped"       # real odds, no edge found
                     elif now > game_dt:
-                        status_label = "started"
+                        status_label = "started"       # started but never analysed (rare)
                     elif diff < 0:
-                        status_label = "window_open"  # bet window open but no bet yet
+                        status_label = "window_open"   # window open, not yet analysed
                     elif diff < 30 * 60:
                         status_label = "soon"          # < 30 min until bet window
                     else:
@@ -201,13 +211,63 @@ def paper_trading():
     for b in history:
         b["start_time"] = start_time_map.get(b["match"], "")
 
+    # --- Model accuracy / calibration stats ---
+    settled = [b for b in history if b.get("status") in ("won", "lost")]
+    model_stats = {"total": 0, "wins": 0, "pl": 0.0, "staked": 0.0,
+                   "roi": 0.0, "win_rate": 0.0, "by_market": {}, "calibration": []}
+    if settled:
+        wins   = sum(1 for b in settled if b["status"] == "won")
+        pl     = sum(b.get("profit", 0) for b in settled)
+        staked = sum(b.get("stake", 50) for b in settled)
+        # by market
+        by_mkt = {}
+        for b in settled:
+            mkt = "Moneyline" if b["market"] == "Moneyline" else "Over/Under"
+            by_mkt.setdefault(mkt, {"bets": 0, "wins": 0, "pl": 0.0, "staked": 0.0})
+            by_mkt[mkt]["bets"]   += 1
+            by_mkt[mkt]["wins"]   += 1 if b["status"] == "won" else 0
+            by_mkt[mkt]["pl"]     += b.get("profit", 0)
+            by_mkt[mkt]["staked"] += b.get("stake", 50)
+        for mkt, d in by_mkt.items():
+            d["win_rate"] = round(d["wins"] / d["bets"] * 100, 1)
+            d["roi"]      = round(d["pl"] / d["staked"] * 100, 1)
+        # calibration buckets
+        buckets = {}
+        for b in settled:
+            p = b.get("prediction", 0.5)
+            bucket = round(int(p * 10) / 10, 1)
+            buckets.setdefault(bucket, []).append(b["status"] == "won")
+        calibration = []
+        for k in sorted(buckets):
+            vals   = buckets[k]
+            actual = sum(vals) / len(vals) * 100
+            calibration.append({
+                "label":    f"{int(k*100)}-{int(k*100)+9}%",
+                "bets":     len(vals),
+                "expected": round(k * 100, 0),
+                "actual":   round(actual, 1),
+                "diff":     round(actual - k * 100, 1),
+            })
+        model_stats = {
+            "total":     len(settled),
+            "wins":      wins,
+            "pl":        round(pl, 2),
+            "staked":    round(staked, 2),
+            "roi":       round(pl / staked * 100, 1),
+            "win_rate":  round(wins / len(settled) * 100, 1),
+            "by_market": by_mkt,
+            "calibration": calibration,
+        }
+
     return render_template('paper.html',
                            status=status,
                            pending=pending,
                            history=history,
                            schedule=schedule_cards,
                            mins_before=MINS_BEFORE,
-                           now_str=now.strftime("%H:%M"))
+                           now_str=now.strftime("%H:%M"),
+                           model_stats=model_stats,
+                           failed_matches=failed_matches)
 
 
 # -- API endpoints --
@@ -303,21 +363,12 @@ def api_auto_settle():
     return jsonify({"settled": len(settled), "bets": settled})
 
 
-@app.route('/audit')
-def audit():
-    from cache.inference_log import get_for_date
-    date = request.args.get('date', datetime.now().strftime('%Y-%m-%d'))
-    entries = get_for_date(date)
-    trader = get_paper_trader()
-    all_bets = trader.get_history(limit=500)
-    date_bets = [b for b in all_bets if b.get('timestamp', '').startswith(date)]
-    return render_template('audit.html', date=date, entries=entries, bets=date_bets)
-
 
 @app.route('/api/inference/recent')
 def api_inference_recent():
-    hours = int(request.args.get('hours', 24))
-    return jsonify(get_inference_log(hours=hours))
+    hours = int(request.args.get('hours', 720))   # default 30 days so retro entries show
+    limit = int(request.args.get('limit', 50))
+    return jsonify(get_inference_log(hours=hours, limit=limit))
 
 
 @app.route('/logs')

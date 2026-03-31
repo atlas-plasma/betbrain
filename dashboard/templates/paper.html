@@ -58,6 +58,8 @@
         .game-card.scheduled::before { background: var(--text3); }
         .game-card.soon::before { background: #f59e0b; }
         .game-card.window_open::before { background: var(--brand); animation: pulse-bar 1s infinite; }
+        .game-card.skipped::before { background: var(--text3); }
+        .game-card.failed::before  { background: var(--danger); }
         .game-card.bet_placed::before { background: var(--success); }
         .game-card.started::before { background: var(--text3); opacity: 0.4; }
         @keyframes pulse-bar { 0%,100%{opacity:1} 50%{opacity:0.5} }
@@ -71,6 +73,8 @@
         .status-scheduled { background: var(--surface2); color: var(--text3); }
         .status-soon { background: #fef3cd; color: #92660a; }
         .status-window_open { background: var(--brand-light); color: var(--brand); }
+        .status-skipped { background: var(--surface2); color: var(--text2); }
+        .status-failed  { background: var(--danger-bg); color: var(--danger); }
         .status-bet_placed { background: var(--success-bg); color: var(--success); }
         .status-started { background: var(--surface2); color: var(--text3); }
         .countdown { font-size: 0.75rem; color: var(--brand); font-weight: 600; margin-top: 0.25rem; }
@@ -151,10 +155,8 @@
         BetBrain
     </div>
     <div class="nav-links">
-        <a href="/">Analysis</a>
         <a href="/backtest">Backtest</a>
         <a href="/paper" class="active">Paper Trade</a>
-        <a href="/audit">Audit</a>
         <a href="/logs">Logs</a>
     </div>
 </nav>
@@ -252,8 +254,12 @@
 
                         {% if g.status == 'bet_placed' %}
                             <span class="game-status status-bet_placed">✓ Bet placed</span>
+                        {% elif g.status == 'failed' %}
+                            <span class="game-status status-failed">Failed</span>
+                        {% elif g.status == 'skipped' %}
+                            <span class="game-status status-skipped">Skipped</span>
                         {% elif g.status == 'window_open' %}
-                            <span class="game-status status-window_open">⚡ Betting now…</span>
+                            <span class="game-status status-window_open">⚡ Analysing…</span>
                         {% elif g.status == 'soon' %}
                             <span class="game-status status-soon">⏱ In {{ g.minutes_until_bet }} min</span>
                         {% elif g.status == 'started' %}
@@ -308,6 +314,83 @@
         </div>
         <div id="actionMsg" style="margin-top:0.75rem;font-size:0.82rem;color:var(--text2);display:none;"></div>
     </div>
+
+    <!-- Model accuracy stats -->
+    {% if model_stats.total > 0 %}
+    <div class="section">
+        <div class="section-title">📊 Model Accuracy &amp; Calibration</div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:1rem;margin-bottom:1.25rem;">
+            <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:1rem;text-align:center;">
+                <div style="font-size:1.5rem;font-weight:700;color:var(--text);">{{ model_stats.total }}</div>
+                <div style="font-size:0.75rem;color:var(--text3);">Settled Bets</div>
+            </div>
+            <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:1rem;text-align:center;">
+                <div style="font-size:1.5rem;font-weight:700;color:{% if model_stats.win_rate >= 55 %}var(--green){% else %}var(--red){% endif %};">{{ model_stats.win_rate }}%</div>
+                <div style="font-size:0.75rem;color:var(--text3);">Win Rate</div>
+            </div>
+            <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:1rem;text-align:center;">
+                <div style="font-size:1.5rem;font-weight:700;color:{% if model_stats.roi >= 0 %}var(--green){% else %}var(--red){% endif %};">{{ model_stats.roi }}%</div>
+                <div style="font-size:0.75rem;color:var(--text3);">ROI</div>
+            </div>
+            <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:1rem;text-align:center;">
+                <div style="font-size:1.5rem;font-weight:700;color:{% if model_stats.pl >= 0 %}var(--green){% else %}var(--red){% endif %};">R{{ "%.0f"|format(model_stats.pl) }}</div>
+                <div style="font-size:0.75rem;color:var(--text3);">Total P/L</div>
+            </div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:1.25rem;">
+            <!-- Calibration table -->
+            <div>
+                <div style="font-size:0.8rem;font-weight:600;color:var(--text2);margin-bottom:0.5rem;">Calibration — model% vs actual win%</div>
+                <table style="width:100%;font-size:0.8rem;">
+                    <thead><tr>
+                        <th style="text-align:left;padding:0.3rem 0.5rem;color:var(--text3);">Model range</th>
+                        <th style="text-align:right;padding:0.3rem 0.5rem;color:var(--text3);">Bets</th>
+                        <th style="text-align:right;padding:0.3rem 0.5rem;color:var(--text3);">Expected</th>
+                        <th style="text-align:right;padding:0.3rem 0.5rem;color:var(--text3);">Actual</th>
+                        <th style="text-align:right;padding:0.3rem 0.5rem;color:var(--text3);">Diff</th>
+                    </tr></thead>
+                    <tbody>
+                    {% for row in model_stats.calibration %}
+                    <tr style="border-top:1px solid var(--border);">
+                        <td style="padding:0.3rem 0.5rem;">{{ row.label }}</td>
+                        <td style="text-align:right;padding:0.3rem 0.5rem;color:var(--text3);">{{ row.bets }}</td>
+                        <td style="text-align:right;padding:0.3rem 0.5rem;color:var(--text3);">{{ row.expected }}%</td>
+                        <td style="text-align:right;padding:0.3rem 0.5rem;font-weight:600;">{{ row.actual }}%</td>
+                        <td style="text-align:right;padding:0.3rem 0.5rem;color:{% if row.diff >= 0 %}var(--green){% else %}var(--red){% endif %};">{{ "+" if row.diff >= 0 else "" }}{{ row.diff }}%</td>
+                    </tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+                <div style="font-size:0.72rem;color:var(--text3);margin-top:0.4rem;">Actual > Expected = model is underconfident (good). Actual < Expected = model overclaims.</div>
+            </div>
+
+            <!-- By market -->
+            <div>
+                <div style="font-size:0.8rem;font-weight:600;color:var(--text2);margin-bottom:0.5rem;">Performance by Market</div>
+                <table style="width:100%;font-size:0.8rem;">
+                    <thead><tr>
+                        <th style="text-align:left;padding:0.3rem 0.5rem;color:var(--text3);">Market</th>
+                        <th style="text-align:right;padding:0.3rem 0.5rem;color:var(--text3);">Bets</th>
+                        <th style="text-align:right;padding:0.3rem 0.5rem;color:var(--text3);">Win%</th>
+                        <th style="text-align:right;padding:0.3rem 0.5rem;color:var(--text3);">ROI</th>
+                    </tr></thead>
+                    <tbody>
+                    {% for mkt, d in model_stats.by_market.items() %}
+                    <tr style="border-top:1px solid var(--border);">
+                        <td style="padding:0.3rem 0.5rem;">{{ mkt }}</td>
+                        <td style="text-align:right;padding:0.3rem 0.5rem;color:var(--text3);">{{ d.bets }}</td>
+                        <td style="text-align:right;padding:0.3rem 0.5rem;font-weight:600;color:{% if d.win_rate >= 55 %}var(--green){% else %}var(--red){% endif %};">{{ d.win_rate }}%</td>
+                        <td style="text-align:right;padding:0.3rem 0.5rem;font-weight:600;color:{% if d.roi >= 0 %}var(--green){% else %}var(--red){% endif %};">{{ "+" if d.roi >= 0 else "" }}{{ d.roi }}%</td>
+                    </tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+                <div style="font-size:0.72rem;color:var(--text3);margin-top:0.4rem;">Sample is small — revisit after 100+ bets per market.</div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
 
     <!-- Pending bets -->
     <div class="section">
@@ -602,52 +685,75 @@ function closeModal() {
 }
 
 // ---- Inference side panel ----
+const INF_PAGE_SIZE = 10;
+let _infPage = 0;
+
+function renderInferencePanel() {
+    const el = document.getElementById('inferenceList');
+    if (!_inferenceData.length) {
+        el.innerHTML = '<div class="inf-empty">No analyses yet.<br><small>Fills up once the auto-trader runs.</small></div>';
+        document.getElementById('infMeta').textContent = '0 games';
+        return;
+    }
+
+    // Group by match, preserve order (most recent first)
+    const groupOrder = [];
+    const groups = {};
+    _inferenceData.forEach(r => {
+        if (!groups[r.match]) { groups[r.match] = { time: r.start_time, date: r.game_date, rows: [] }; groupOrder.push(r.match); }
+        groups[r.match].rows.push(r);
+    });
+
+    const totalPages = Math.ceil(groupOrder.length / INF_PAGE_SIZE);
+    const pageMatches = groupOrder.slice(_infPage * INF_PAGE_SIZE, (_infPage + 1) * INF_PAGE_SIZE);
+
+    document.getElementById('infMeta').textContent =
+        `${groupOrder.length} games · showing ${_infPage * INF_PAGE_SIZE + 1}–${Math.min((_infPage + 1) * INF_PAGE_SIZE, groupOrder.length)}`;
+
+    let html = '';
+    pageMatches.forEach(match => {
+        const g = groups[match];
+        const anyBet = g.rows.some(r => r.bet_placed);
+        const borderColor = anyBet ? 'var(--success)' : 'var(--border)';
+        const bgColor = anyBet ? 'rgba(45,122,79,0.04)' : '';
+        const matchEnc = match.replace(/'/g, "\\'");
+        html += `<div class="inference-group" style="border-left:3px solid ${borderColor};background:${bgColor};padding-left:0.85rem;cursor:pointer;" onclick="openAnalysis('${matchEnc}')">`;
+        html += `<div class="inf-match">${match} <span class="inf-time">${g.date || ''} ${g.time || ''}</span></div>`;
+        g.rows.forEach(r => {
+            const edgeClass = r.edge >= 0.03 ? 'positive' : 'negative';
+            const badge = r.bet_placed
+                ? '<span class="inf-badge bet">BET</span>'
+                : '<span class="inf-badge skip">SKIP</span>';
+            html += `<div class="inf-row">
+                <span class="inf-market">${r.market}</span>
+                <span style="display:flex;gap:0.4rem;align-items:center;">
+                    <span class="inf-edge ${edgeClass}">${(r.edge*100).toFixed(1)}%</span>
+                    ${badge}
+                </span>
+            </div>`;
+        });
+        html += `<div style="font-size:0.68rem;color:var(--text3);margin-top:0.3rem;">Click to see full analysis</div>`;
+        html += `</div>`;
+    });
+
+    // Pagination controls
+    if (totalPages > 1) {
+        html += `<div style="display:flex;justify-content:space-between;padding:0.5rem 1rem;border-top:1px solid var(--border);font-size:0.75rem;">
+            <button onclick="_infPage=Math.max(0,_infPage-1);renderInferencePanel()" ${_infPage===0?'disabled':''} style="background:none;border:1px solid var(--border);border-radius:4px;padding:0.2rem 0.6rem;cursor:pointer;color:var(--text2);">← Prev</button>
+            <span style="color:var(--text3)">Page ${_infPage+1} / ${totalPages}</span>
+            <button onclick="_infPage=Math.min(${totalPages-1},_infPage+1);renderInferencePanel()" ${_infPage===totalPages-1?'disabled':''} style="background:none;border:1px solid var(--border);border-radius:4px;padding:0.2rem 0.6rem;cursor:pointer;color:var(--text2);">Next →</button>
+        </div>`;
+    }
+
+    el.innerHTML = html;
+}
+
 function loadInferencePanel() {
-    fetch('/api/inference/recent?hours=24')
+    fetch('/api/inference/recent?hours=720&limit=200')
         .then(r => r.json())
         .then(data => {
             _inferenceData = data;
-            const el = document.getElementById('inferenceList');
-            if (!data.length) {
-                el.innerHTML = '<div class="inf-empty">No analyses yet.<br><small>Fills up once the auto-trader runs.</small></div>';
-                document.getElementById('infMeta').textContent = '0 games';
-                return;
-            }
-
-            const groups = {};
-            data.forEach(r => {
-                if (!groups[r.match]) groups[r.match] = { time: r.start_time, rows: [] };
-                groups[r.match].rows.push(r);
-            });
-
-            const matchCount = Object.keys(groups).length;
-            document.getElementById('infMeta').textContent = `${matchCount} game${matchCount !== 1 ? 's' : ''} · last 24h`;
-
-            let html = '';
-            Object.entries(groups).forEach(([match, g]) => {
-                const anyBet = g.rows.some(r => r.bet_placed);
-                const borderColor = anyBet ? 'var(--success)' : 'var(--border)';
-                const bgColor = anyBet ? 'rgba(45,122,79,0.04)' : '';
-                const matchEnc = match.replace(/'/g, "\\'");
-                html += `<div class="inference-group" style="border-left:3px solid ${borderColor};background:${bgColor};padding-left:0.85rem;cursor:pointer;" onclick="openAnalysis('${matchEnc}')">`;
-                html += `<div class="inf-match">${match} <span class="inf-time">${g.time || ''}</span></div>`;
-                g.rows.forEach(r => {
-                    const edgeClass = r.edge >= 0.03 ? 'positive' : 'negative';
-                    const badge = r.bet_placed
-                        ? '<span class="inf-badge bet">BET</span>'
-                        : '<span class="inf-badge skip">SKIP</span>';
-                    html += `<div class="inf-row">
-                        <span class="inf-market">${r.market}</span>
-                        <span style="display:flex;gap:0.4rem;align-items:center;">
-                            <span class="inf-edge ${edgeClass}">${(r.edge*100).toFixed(1)}%</span>
-                            ${badge}
-                        </span>
-                    </div>`;
-                });
-                html += `<div style="font-size:0.68rem;color:var(--text3);margin-top:0.3rem;">Click to see full analysis</div>`;
-                html += `</div>`;
-            });
-            el.innerHTML = html;
+            renderInferencePanel();
         })
         .catch(() => {
             document.getElementById('inferenceList').innerHTML = '<div class="inf-empty">Could not load.</div>';

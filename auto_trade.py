@@ -29,6 +29,8 @@ if _env.exists():
             k, v = line.split("=", 1)
             os.environ.setdefault(k.strip(), v.strip())
 
+import time
+
 from core.pipeline import BetBrainPipeline
 from strategy.selector import StrategySelector
 from papertrade import get_paper_trader
@@ -42,6 +44,8 @@ import cache.system_log as syslog
 STRATEGY        = os.environ.get("AUTO_STRATEGY", "value")
 BET_STAKE       = float(os.environ.get("AUTO_STAKE", "50"))
 MINUTES_BEFORE  = int(os.environ.get("AUTO_MINS_BEFORE", "90"))  # bet window before game
+MAX_BET_RETRIES = 5
+RETRY_DELAY_SEC = 15  # seconds between retries
 
 
 # ------------------------------------------------------------------ #
@@ -259,7 +263,40 @@ def settle_pending_bets() -> List[Dict]:
 
 # Tracks which (date, match) combos have already been bet so we don't
 # double-bet across multiple scheduler ticks.
-_already_bet: Set[tuple] = set()
+# Pre-seeded from the database on startup so container restarts don't cause duplicates.
+_already_bet:   Set[tuple] = set()
+_already_logged: Set[tuple] = set()
+
+def _seed_already_bet() -> None:
+    """On startup, populate _already_bet from existing paper_bets so a container
+    restart never double-bets a game that was already handled."""
+    try:
+        import sqlite3, os
+        db = os.environ.get("DB_PATH", "/data/betbrain.db")
+        if not os.path.exists(db):
+            db = "betbrain.db"
+        conn = sqlite3.connect(db)
+        rows = conn.execute(
+            "SELECT DISTINCT match, timestamp FROM paper_bets WHERE status IN ('pending','won','lost')"
+        ).fetchall()
+        for match, ts in rows:
+            if not ts or not match or " @ " not in match:
+                continue
+            date = ts[:10]
+            parts = match.split(" @ ")
+            away, home = parts[0], parts[1]
+            _already_bet.add((date, home, away))
+            # Also seed next-day key: bets placed late at night (e.g. 23:30)
+            # may be for games whose schedule date is the following day (01:00 SA)
+            from datetime import date as _date, timedelta
+            next_day = str(_date.fromisoformat(date) + timedelta(days=1))
+            _already_bet.add((next_day, home, away))
+        conn.close()
+        print(f"[auto_trade] Seeded _already_bet with {len(_already_bet)} game(s) from DB")
+    except Exception as e:
+        print(f"[auto_trade] seed warning: {e}")
+
+_seed_already_bet()
 
 
 def check_and_place_due_bets() -> List[Dict]:
@@ -295,34 +332,46 @@ def check_and_place_due_bets() -> List[Dict]:
             bet_window = game_time - timedelta(minutes=MINUTES_BEFORE)
             key = (game_date, game["home_team"], game["away_team"])
 
-            # Window opened in the last 2 minutes AND not already bet
-            if bet_window <= now < bet_window + timedelta(minutes=2) and key not in _already_bet:
+            # Bet window is open — any time between 90min before and puck drop
+            if bet_window <= now < game_time and key not in _already_bet:
                 due_games.append(game)
-                _already_bet.add(key)
 
         if not due_games:
             return []
 
         syslog.info("scheduler", f"Scheduler tick — {len(due_games)} game(s) due for betting")
 
-        # Run pipeline once and filter to due games
-        pipeline = BetBrainPipeline()
-        all_opps = pipeline.run(days=1)
-        syslog.info("scheduler", f"Pipeline complete — {len(all_opps)} opportunities found")
-
-        # Log ALL opportunities now — so every run is in the audit trail
-        # even if no bets end up being placed
-        log_inference(all_opps, set())
-
         placed = []
         for game in due_games:
             match_key = f"{game['away_team']} @ {game['home_team']}"
+            log_key   = (game["date"], game["home_team"], game["away_team"])
             syslog.info("scheduler", f"Bet window open: {match_key} (T-{MINUTES_BEFORE}min)")
-            print(f"[auto_trade] Bet window open: {match_key} "
-                  f"(T-{MINUTES_BEFORE}min)")
-            group = [o for o in all_opps if o.get("match") == match_key
-                     and o.get("date") == game_date]
-            placed.extend(place_bets_for_game(group))
+            print(f"[auto_trade] Bet window open: {match_key} (T-{MINUTES_BEFORE}min)")
+
+            bets = []
+            for attempt in range(1, MAX_BET_RETRIES + 1):
+                try:
+                    pipeline = BetBrainPipeline()
+                    all_opps = pipeline.run(days=2)
+                    syslog.info("scheduler", f"Pipeline complete — {len(all_opps)} opps (attempt {attempt})")
+                    group = [o for o in all_opps if o.get("match") == match_key
+                             and o.get("date") == game["date"]]
+                    bets = place_bets_for_game(group)
+                    break  # success — exit retry loop
+                except Exception as e:
+                    syslog.error("scheduler",
+                                 f"Attempt {attempt}/{MAX_BET_RETRIES} failed for {match_key}: {e}", e)
+                    print(f"[auto_trade] attempt {attempt}/{MAX_BET_RETRIES} failed: {e}")
+                    if attempt < MAX_BET_RETRIES:
+                        time.sleep(RETRY_DELAY_SEC)
+                    else:
+                        syslog.error("scheduler",
+                                     f"All {MAX_BET_RETRIES} attempts failed for {match_key} — skipping")
+
+            # Lock game regardless of outcome — decision made for this window
+            _already_bet.add(log_key)
+            _already_logged.add(log_key)
+            placed.extend(bets)
 
         return placed
 
