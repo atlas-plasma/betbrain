@@ -46,7 +46,9 @@ class OddsAPIFetcher:
         resp = self.session.get(url, params=params, timeout=10)
         resp.raise_for_status()
         remaining = resp.headers.get("x-requests-remaining", "?")
-        print(f"  [odds] TheOddsAPI — {remaining} requests remaining this month")
+        used = resp.headers.get("x-requests-used", "?")
+        from cache import system_log as syslog
+        syslog.info("odds", f"TheOddsAPI success — {remaining} requests remaining ({used} used this month)")
         return resp.json()
 
     def get_best_game_odds(self, home: str, away: str, game_date: str = None) -> Dict:

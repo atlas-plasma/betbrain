@@ -73,10 +73,7 @@ class NHLDataFetcher:
                 for day in data.get("gameWeek", []):
                     day_date = day.get("date", "")
                     for game in day.get("games", []):
-                        # Skip games that are already final
                         state = game.get("gameState", "")
-                        if state in ("OFF", "FINAL"):
-                            continue
 
                         start_time = ""
                         local_date = day_date  # fallback to NHL's ET date

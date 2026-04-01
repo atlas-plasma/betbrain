@@ -25,6 +25,7 @@ from agents.research import ResearchAgent
 from agents.claude_agent import ClaudeAgent
 from agents.consensus import ConsensusAggregator, INITIAL_BANKROLL
 from cache.odds_store import save_odds
+import cache.system_log as syslog
 
 _OU_LINES = [4.5, 5.5, 6.5, 7.5]
 
@@ -345,7 +346,7 @@ class BetBrainPipeline:
             game_date = game.get("date", "")
             if not home or not away or not game_date:
                 continue
-            stored = get_odds(game_date, home, away)
+            stored = get_odds(game_date, home, away) or get_odds(game_date, away, home)
             if stored and stored.get("home_ml"):
                 odds_map[(home, away)] = {
                     "home_ml": stored["home_ml"],
@@ -358,15 +359,11 @@ class BetBrainPipeline:
             else:
                 missing.append(game)
 
-        if not missing:
-            print(f"  [odds] All {len(odds_map)} game(s) loaded from DB — skipping API call")
-            return odds_map
-
         if not self.odds_api.has_api():
-            print(f"  [odds] No ODDS_API_KEY — {len(missing)} game(s) will use fallback odds")
+            syslog.info("odds", "No ODDS_API_KEY — using DB odds where available")
             return odds_map
 
-        print(f"  [odds] Fetching API odds for {len(missing)} game(s) not yet in DB")
+        syslog.info("odds", f"Fetching fresh odds from API for {len(games)} game(s)")
         try:
             api_games = self.odds_api.get_market_odds()
             preferred = self.odds_api.PREFERRED_BOOKS
@@ -377,8 +374,7 @@ class BetBrainPipeline:
                 home = self._NAME_TO_ABBREV.get(home_full, home_full)
                 away = self._NAME_TO_ABBREV.get(away_full, away_full)
 
-                if (home, away) in odds_map:
-                    continue  # already loaded from DB
+                # Always use fresh API odds, overwriting any DB entry
 
                 # Sort bookmakers: preferred books first
                 books = sorted(
@@ -415,9 +411,11 @@ class BetBrainPipeline:
                         "ou_line": ou_line or 6.5,
                         "book":    book_used,
                     }
-                    print(f"    {away} @ {home}: {home_ml}/{away_ml} ({book_used})")
+                    syslog.info("odds", f"{away} @ {home}: {home_ml}/{away_ml} ({book_used})")
         except Exception as e:
-            print(f"  [odds] fetch error: {e}")
+            syslog.error("odds", f"API fetch failed: {e}", e)
+            # Re-raise so the retry loop in auto_trade.py can retry the full pipeline
+            raise
         return odds_map
 
     def _vote_summary(self, consensus) -> str:

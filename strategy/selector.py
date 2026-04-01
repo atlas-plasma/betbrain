@@ -5,6 +5,45 @@ advanced model (PDO, goalie quality, B2B, edge, Kelly).
 
 from typing import Dict
 
+MAX_ML_ODDS         = 3.00  # never bet moneyline above this
+MAX_OPPOSING_WEIGHT = 0.20  # don't bet if agents against hold >20% of active weight
+
+# Agent weights mirror consensus.py
+_WEIGHTS = {"Statistical": 0.40, "Research": 0.25, "Form": 0.20, "ELO": 0.15, "Claude AI": 0.20, "AI Analyst": 0.20}
+
+
+def _opposing_weight_ratio(opportunity: Dict) -> float:
+    """Fraction of active (non-skip) weight that voted AGAINST the winning pick."""
+    win_pick = opportunity.get("win_pick", "")
+    votes    = opportunity.get("agent_votes", [])
+    market   = opportunity.get("market", "")
+    home     = opportunity.get("home_team", "")
+    away     = opportunity.get("away_team", "")
+    is_ml    = "Moneyline" in market
+    is_over  = "Over" in market
+    is_under = "Under" in market
+
+    for_w = against_w = 0.0
+    for v in votes:
+        w    = _WEIGHTS.get(v.get("agent", ""), 0.10)
+        pick = v.get("ml", "") if is_ml else v.get("ou", "")
+        if not pick or pick == "skip":
+            continue
+        if is_ml:
+            voted_for = (pick == "home" and win_pick == home) or (pick == "away" and win_pick == away)
+        elif is_over:
+            voted_for = (pick == "over")
+        else:
+            voted_for = (pick == "under")
+
+        if voted_for:
+            for_w += w
+        else:
+            against_w += w
+
+    total = for_w + against_w
+    return against_w / total if total > 0 else 0.0
+
 
 class StrategySelector:
 
@@ -27,8 +66,16 @@ class StrategySelector:
         s = self.strategy_name
 
         if s == "value":
-            # Basic value: positive edge with at least medium confidence
-            return edge > 0.03 and confidence in ("medium", "high")
+            if edge <= 0.03 or confidence not in ("medium", "high"):
+                return False
+            # Don't bet extreme moneyline odds — model unreliable at this range
+            odds = opportunity.get("odds", 2.0)
+            if "Moneyline" in market and odds > MAX_ML_ODDS:
+                return False
+            # Don't bet if opposing agents hold more than 20% of active weight
+            if _opposing_weight_ratio(opportunity) > MAX_OPPOSING_WEIGHT:
+                return False
+            return True
 
         elif s == "pdo_fade":
             # Only bet when one team has PDO > 102 (regression signal).
